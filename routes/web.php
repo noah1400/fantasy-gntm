@@ -2,7 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 
-Route::view('/', 'welcome');
+Route::redirect('/', '/play');
 
 Route::redirect('dashboard', '/play')->name('dashboard');
 

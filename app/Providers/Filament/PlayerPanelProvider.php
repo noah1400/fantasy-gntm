@@ -27,7 +27,7 @@ class PlayerPanelProvider extends PanelProvider
             ->path('play')
             ->viteTheme('resources/css/filament/player/theme.css')
             ->login()
-            ->registration()
+            ->profile()
             ->colors([
                 'primary' => Color::Pink,
             ])
