@@ -280,5 +280,5 @@ return [
         'max_components' => 20,      // Maximum components per batch request
     ],
 
-    'asset_url' => env('ASSET_URL', env(APP_URL))
+    'asset_url' => env('ASSET_URL', env('APP_URL'))
 ];
