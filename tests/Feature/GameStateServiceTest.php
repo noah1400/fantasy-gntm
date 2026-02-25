@@ -238,9 +238,9 @@ it('getRequiredPostEpisodeActions returns optional_swap after drops create free 
 
     $actions = $this->service->getRequiredPostEpisodeActions($this->season, $this->episode);
 
-    // Both players should get optional_swap since model2 is now a free agent
+    // Only the lowest-score player gets the swap turn
     $swapActions = collect($actions)->where('action', 'optional_swap');
-    expect($swapActions)->toHaveCount(2);
+    expect($swapActions)->toHaveCount(1);
 });
 
 it('getRequiredPostEpisodeActions returns player_eliminated when no models and no free agents', function () {
@@ -420,6 +420,70 @@ it('endEpisode sends mandatory_drop notification when no free agents but player 
 
     expect($player1->unreadNotifications)->toHaveCount(1);
     expect($player1->unreadNotifications->first()->data['title'])->toBe('You must drop a model');
+});
+
+it('optional_swap enforces turn order by lowest score first', function () {
+    $player1 = User::factory()->create();
+    $player2 = User::factory()->create();
+    $this->season->players()->attach([$player1->id, $player2->id]);
+
+    $model1 = TopModel::factory()->create(['season_id' => $this->season->id]);
+    $model2 = TopModel::factory()->create(['season_id' => $this->season->id]);
+    $model3 = TopModel::factory()->create(['season_id' => $this->season->id]);
+    $model4 = TopModel::factory()->create(['season_id' => $this->season->id]);
+
+    PlayerModel::factory()->create([
+        'user_id' => $player1->id,
+        'top_model_id' => $model1->id,
+        'season_id' => $this->season->id,
+    ]);
+    PlayerModel::factory()->create([
+        'user_id' => $player1->id,
+        'top_model_id' => $model2->id,
+        'season_id' => $this->season->id,
+    ]);
+    PlayerModel::factory()->create([
+        'user_id' => $player1->id,
+        'top_model_id' => $model3->id,
+        'season_id' => $this->season->id,
+    ]);
+    PlayerModel::factory()->create([
+        'user_id' => $player2->id,
+        'top_model_id' => $model4->id,
+        'season_id' => $this->season->id,
+    ]);
+
+    // Give player2 more points so player1 has lowest score
+    $action = Action::factory()->create(['season_id' => $this->season->id, 'multiplier' => 1.00]);
+    ActionLog::factory()->create([
+        'action_id' => $action->id,
+        'top_model_id' => $model4->id,
+        'episode_id' => $this->episode->id,
+        'count' => 10,
+    ]);
+
+    // Eliminate model1 — no free agents, so player1 must mandatory drop
+    $this->service->endEpisode($this->episode, [$model1->id]);
+    $this->service->dropModel($player1, $this->season, $model2, isMandatory: true, episode: $this->episode);
+
+    // Only player1 (lowest score) should get the swap turn
+    $actions = $this->service->getRequiredPostEpisodeActions($this->season, $this->episode);
+    $swapActions = collect($actions)->where('action', 'optional_swap');
+    expect($swapActions)->toHaveCount(1)
+        ->and($swapActions->first()['user']->id)->toBe($player1->id);
+
+    // Player1 skips — now player2 should get the swap turn
+    GameEvent::create([
+        'season_id' => $this->season->id,
+        'episode_id' => $this->episode->id,
+        'type' => GameEventType::SwapSkipped,
+        'payload' => ['user_id' => $player1->id, 'user_name' => $player1->name],
+    ]);
+
+    $actions = $this->service->getRequiredPostEpisodeActions($this->season, $this->episode);
+    $swapActions = collect($actions)->where('action', 'optional_swap');
+    expect($swapActions)->toHaveCount(1)
+        ->and($swapActions->first()['user']->id)->toBe($player2->id);
 });
 
 it('swapModel throws when picking eliminated model', function () {

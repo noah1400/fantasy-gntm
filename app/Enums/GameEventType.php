@@ -14,6 +14,7 @@ enum GameEventType: string implements HasColor, HasLabel
     case ModelDrop = 'model_drop';
     case ModelSwap = 'model_swap';
     case PlayerEliminated = 'player_eliminated';
+    case PreEpisodeSwap = 'pre_episode_swap';
     case SwapSkipped = 'swap_skipped';
 
     public function getLabel(): string|Htmlable|null
@@ -25,6 +26,7 @@ enum GameEventType: string implements HasColor, HasLabel
             self::ModelDrop => 'Model Drop',
             self::ModelSwap => 'Model Swap',
             self::PlayerEliminated => 'Player Eliminated',
+            self::PreEpisodeSwap => 'Pre-Episode Swap',
             self::SwapSkipped => 'Swap Skipped',
         };
     }
@@ -38,6 +40,7 @@ enum GameEventType: string implements HasColor, HasLabel
             self::ModelDrop => 'warning',
             self::ModelSwap => 'info',
             self::PlayerEliminated => 'danger',
+            self::PreEpisodeSwap => 'info',
             self::SwapSkipped => 'gray',
         };
     }

@@ -181,6 +181,73 @@ class GameStateService
         return $playerModel;
     }
 
+    public function preEpisodeSwap(User $user, Season $season, TopModel $dropModel, TopModel $pickModel, Episode $upcomingEpisode, Episode $lastEndedEpisode): PlayerModel
+    {
+        if ($season->players()->where('user_id', $user->id)->wherePivot('is_eliminated', true)->exists()) {
+            throw new \InvalidArgumentException('Eliminated players cannot swap.');
+        }
+
+        if ($pickModel->is_eliminated) {
+            throw new \InvalidArgumentException('Cannot pick an eliminated model.');
+        }
+
+        $alreadyOwned = PlayerModel::query()
+            ->where('top_model_id', $pickModel->id)
+            ->where('season_id', $season->id)
+            ->active()
+            ->exists();
+
+        if ($alreadyOwned) {
+            throw new \InvalidArgumentException('This model is already owned by a player.');
+        }
+
+        $alreadySwapped = GameEvent::query()
+            ->where('season_id', $season->id)
+            ->where('episode_id', $upcomingEpisode->id)
+            ->where('type', GameEventType::PreEpisodeSwap)
+            ->whereJsonContains('payload->user_id', $user->id)
+            ->exists();
+
+        if ($alreadySwapped) {
+            throw new \InvalidArgumentException('You have already used your pre-episode swap.');
+        }
+
+        // Drop the old model (points through last ended episode)
+        $playerModel = PlayerModel::query()
+            ->where('user_id', $user->id)
+            ->where('top_model_id', $dropModel->id)
+            ->where('season_id', $season->id)
+            ->active()
+            ->firstOrFail();
+
+        $playerModel->update(['dropped_after_episode_id' => $lastEndedEpisode->id]);
+
+        // Pick the new model (points from upcoming episode onward)
+        $newPlayerModel = PlayerModel::create([
+            'user_id' => $user->id,
+            'top_model_id' => $pickModel->id,
+            'season_id' => $season->id,
+            'picked_in_episode_id' => $lastEndedEpisode->id,
+            'pick_type' => PickType::PreEpisodeSwap,
+        ]);
+
+        GameEvent::create([
+            'season_id' => $season->id,
+            'episode_id' => $upcomingEpisode->id,
+            'type' => GameEventType::PreEpisodeSwap,
+            'payload' => [
+                'user_id' => $user->id,
+                'user_name' => $user->name,
+                'dropped_model_id' => $dropModel->id,
+                'dropped_model_name' => $dropModel->name,
+                'picked_model_id' => $pickModel->id,
+                'picked_model_name' => $pickModel->name,
+            ],
+        ]);
+
+        return $newPlayerModel;
+    }
+
     public function eliminatePlayer(User $user, Season $season, ?Episode $episode = null): void
     {
         $season->players()->updateExistingPivot($user->id, ['is_eliminated' => true]);
@@ -276,7 +343,7 @@ class GameStateService
             ];
         }
 
-        // Phase 2: After all mandatory drops complete, optional swaps for all players
+        // Phase 2: After all mandatory drops complete, optional swap for lowest-score player
         $pendingDrops = collect($actions)->where('action', 'mandatory_drop')->isNotEmpty();
         $pendingPicks = collect($actions)->where('action', 'free_agent_pick')->isNotEmpty();
 
@@ -284,6 +351,8 @@ class GameStateService
             $currentFreeAgents = $seasonService->getFreeAgents($season);
 
             if ($currentFreeAgents->isNotEmpty()) {
+                $swapCandidates = [];
+
                 foreach ($activePlayers as $player) {
                     if ($this->playerHasEvent($episodeEvents, $player, GameEventType::PlayerEliminated)) {
                         continue;
@@ -301,12 +370,20 @@ class GameStateService
                         ->exists();
 
                     if ($hasActiveModels) {
-                        $actions[] = [
-                            'user' => $player,
-                            'action' => 'optional_swap',
-                            'reason' => 'You may swap one model with a free agent.',
-                        ];
+                        $swapCandidates[] = $player;
                     }
+                }
+
+                // Only the lowest-score player gets the swap turn
+                usort($swapCandidates, fn ($a, $b) => $this->scoringService->getPlayerPoints($a, $season)
+                    <=> $this->scoringService->getPlayerPoints($b, $season));
+
+                if (! empty($swapCandidates)) {
+                    $actions[] = [
+                        'user' => $swapCandidates[0],
+                        'action' => 'optional_swap',
+                        'reason' => 'You may swap one model with a free agent.',
+                    ];
                 }
             }
         }

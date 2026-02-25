@@ -10,6 +10,7 @@ enum PickType: string implements HasColor, HasLabel
 {
     case Draft = 'draft';
     case FreeAgent = 'free_agent';
+    case PreEpisodeSwap = 'pre_episode_swap';
     case Swap = 'swap';
 
     public function getLabel(): string|Htmlable|null
@@ -17,6 +18,7 @@ enum PickType: string implements HasColor, HasLabel
         return match ($this) {
             self::Draft => 'Draft',
             self::FreeAgent => 'Free Agent',
+            self::PreEpisodeSwap => 'Pre-Episode Swap',
             self::Swap => 'Swap',
         };
     }
@@ -26,6 +28,7 @@ enum PickType: string implements HasColor, HasLabel
         return match ($this) {
             self::Draft => 'info',
             self::FreeAgent => 'success',
+            self::PreEpisodeSwap => 'info',
             self::Swap => 'warning',
         };
     }
