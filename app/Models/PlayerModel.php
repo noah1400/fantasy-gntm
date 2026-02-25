@@ -16,23 +16,31 @@ class PlayerModel extends Model
         'user_id',
         'top_model_id',
         'season_id',
-        'picked_at',
-        'dropped_at',
+        'picked_in_episode_id',
+        'dropped_after_episode_id',
         'pick_type',
     ];
 
     protected function casts(): array
     {
         return [
-            'picked_at' => 'datetime',
-            'dropped_at' => 'datetime',
             'pick_type' => PickType::class,
         ];
     }
 
     public function scopeActive(Builder $query): Builder
     {
-        return $query->whereNull('dropped_at');
+        return $query->whereNull('dropped_after_episode_id');
+    }
+
+    public function pickedInEpisode(): BelongsTo
+    {
+        return $this->belongsTo(Episode::class, 'picked_in_episode_id');
+    }
+
+    public function droppedAfterEpisode(): BelongsTo
+    {
+        return $this->belongsTo(Episode::class, 'dropped_after_episode_id');
     }
 
     public function scopeForSeason(Builder $query, int|Season $season): Builder

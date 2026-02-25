@@ -12,7 +12,7 @@ use App\Services\ScoringService;
 beforeEach(function () {
     $this->service = app(ScoringService::class);
     $this->season = Season::factory()->active()->create();
-    $this->episode = Episode::factory()->active()->create(['season_id' => $this->season->id]);
+    $this->episode = Episode::factory()->active()->create(['season_id' => $this->season->id, 'number' => 1]);
     $this->topModel = TopModel::factory()->create(['season_id' => $this->season->id]);
     $this->action = Action::factory()->create([
         'season_id' => $this->season->id,
@@ -75,7 +75,7 @@ it('calculates model points correctly', function () {
 });
 
 it('calculates model points for specific episode', function () {
-    $episode2 = Episode::factory()->create(['season_id' => $this->season->id]);
+    $episode2 = Episode::factory()->create(['season_id' => $this->season->id, 'number' => 2]);
 
     ActionLog::factory()->create([
         'action_id' => $this->action->id,
@@ -95,10 +95,11 @@ it('calculates model points for specific episode', function () {
     expect($points)->toBe(6.0);
 });
 
-it('calculates player points from active models', function () {
+it('calculates player points from draft-picked models across all episodes', function () {
     $player = User::factory()->create();
     $this->season->players()->attach($player->id);
 
+    // Draft pick: picked_in_episode_id = null → counts all episodes
     PlayerModel::factory()->create([
         'user_id' => $player->id,
         'top_model_id' => $this->topModel->id,
@@ -115,6 +116,136 @@ it('calculates player points from active models', function () {
     $points = $this->service->getPlayerPoints($player, $this->season);
 
     // 5 * 2.00 = 10.0
+    expect($points)->toBe(10.0);
+});
+
+it('only counts points for episodes after the pick episode', function () {
+    $episode2 = Episode::factory()->create(['season_id' => $this->season->id, 'number' => 2]);
+    $episode3 = Episode::factory()->create(['season_id' => $this->season->id, 'number' => 3]);
+
+    $player = User::factory()->create();
+    $this->season->players()->attach($player->id);
+
+    // Picked after episode 1 → only episodes 2+ count
+    PlayerModel::factory()->pickedIn($this->episode)->create([
+        'user_id' => $player->id,
+        'top_model_id' => $this->topModel->id,
+        'season_id' => $this->season->id,
+    ]);
+
+    // Episode 1 points (should NOT count)
+    ActionLog::factory()->create([
+        'action_id' => $this->action->id,
+        'top_model_id' => $this->topModel->id,
+        'episode_id' => $this->episode->id,
+        'count' => 3,
+    ]);
+    // Episode 2 points (should count)
+    ActionLog::factory()->create([
+        'action_id' => $this->action->id,
+        'top_model_id' => $this->topModel->id,
+        'episode_id' => $episode2->id,
+        'count' => 2,
+    ]);
+    // Episode 3 points (should count)
+    ActionLog::factory()->create([
+        'action_id' => $this->action->id,
+        'top_model_id' => $this->topModel->id,
+        'episode_id' => $episode3->id,
+        'count' => 1,
+    ]);
+
+    $points = $this->service->getPlayerPoints($player, $this->season);
+
+    // Only episodes 2 and 3: (2 + 1) * 2.00 = 6.0
+    expect($points)->toBe(6.0);
+});
+
+it('only counts points up to the dropped episode', function () {
+    $episode2 = Episode::factory()->create(['season_id' => $this->season->id, 'number' => 2]);
+    $episode3 = Episode::factory()->create(['season_id' => $this->season->id, 'number' => 3]);
+
+    $player = User::factory()->create();
+    $this->season->players()->attach($player->id);
+
+    // Draft pick, dropped after episode 2 → only episodes 1–2 count
+    PlayerModel::factory()->dropped($episode2)->create([
+        'user_id' => $player->id,
+        'top_model_id' => $this->topModel->id,
+        'season_id' => $this->season->id,
+    ]);
+
+    // Episode 1 points (should count)
+    ActionLog::factory()->create([
+        'action_id' => $this->action->id,
+        'top_model_id' => $this->topModel->id,
+        'episode_id' => $this->episode->id,
+        'count' => 3,
+    ]);
+    // Episode 2 points (should count)
+    ActionLog::factory()->create([
+        'action_id' => $this->action->id,
+        'top_model_id' => $this->topModel->id,
+        'episode_id' => $episode2->id,
+        'count' => 2,
+    ]);
+    // Episode 3 points (should NOT count — dropped after episode 2)
+    ActionLog::factory()->create([
+        'action_id' => $this->action->id,
+        'top_model_id' => $this->topModel->id,
+        'episode_id' => $episode3->id,
+        'count' => 4,
+    ]);
+
+    $points = $this->service->getPlayerPoints($player, $this->season);
+
+    // Only episodes 1 and 2: (3 + 2) * 2.00 = 10.0
+    expect($points)->toBe(10.0);
+});
+
+it('scopes points correctly for mid-season pick and drop', function () {
+    $episode2 = Episode::factory()->create(['season_id' => $this->season->id, 'number' => 2]);
+    $episode3 = Episode::factory()->create(['season_id' => $this->season->id, 'number' => 3]);
+    $episode4 = Episode::factory()->create(['season_id' => $this->season->id, 'number' => 4]);
+
+    $player = User::factory()->create();
+    $this->season->players()->attach($player->id);
+
+    // Picked after episode 2, dropped after episode 3 → only episode 3 counts
+    PlayerModel::factory()->pickedIn($episode2)->dropped($episode3)->create([
+        'user_id' => $player->id,
+        'top_model_id' => $this->topModel->id,
+        'season_id' => $this->season->id,
+    ]);
+
+    ActionLog::factory()->create([
+        'action_id' => $this->action->id,
+        'top_model_id' => $this->topModel->id,
+        'episode_id' => $this->episode->id,
+        'count' => 1,
+    ]);
+    ActionLog::factory()->create([
+        'action_id' => $this->action->id,
+        'top_model_id' => $this->topModel->id,
+        'episode_id' => $episode2->id,
+        'count' => 1,
+    ]);
+    ActionLog::factory()->create([
+        'action_id' => $this->action->id,
+        'top_model_id' => $this->topModel->id,
+        'episode_id' => $episode3->id,
+        'count' => 5,
+    ]);
+    ActionLog::factory()->create([
+        'action_id' => $this->action->id,
+        'top_model_id' => $this->topModel->id,
+        'episode_id' => $episode4->id,
+        'count' => 3,
+    ]);
+
+    $points = $this->service->getPlayerPoints($player, $this->season);
+
+    // Only episode 3: 5 * 2.00 = 10.0
     expect($points)->toBe(10.0);
 });
 
@@ -158,11 +289,13 @@ it('returns scoreboard sorted by points descending', function () {
         ->and($scoreboard[1]['points'])->toBe(4.0);
 });
 
-it('player points persist after model is dropped', function () {
+it('dropped model points only count through drop episode', function () {
+    $episode2 = Episode::factory()->create(['season_id' => $this->season->id, 'number' => 2]);
+
     $player = User::factory()->create();
     $this->season->players()->attach($player->id);
 
-    PlayerModel::factory()->create([
+    PlayerModel::factory()->dropped($this->episode)->create([
         'user_id' => $player->id,
         'top_model_id' => $this->topModel->id,
         'season_id' => $this->season->id,
@@ -174,16 +307,15 @@ it('player points persist after model is dropped', function () {
         'episode_id' => $this->episode->id,
         'count' => 5,
     ]);
-
-    $pointsBefore = $this->service->getPlayerPoints($player, $this->season);
-    expect($pointsBefore)->toBe(10.0);
-
-    // Drop the model
-    PlayerModel::query()
-        ->where('user_id', $player->id)
-        ->where('top_model_id', $this->topModel->id)
-        ->update(['dropped_at' => now()]);
+    ActionLog::factory()->create([
+        'action_id' => $this->action->id,
+        'top_model_id' => $this->topModel->id,
+        'episode_id' => $episode2->id,
+        'count' => 3,
+    ]);
 
     $pointsAfter = $this->service->getPlayerPoints($player, $this->season);
+
+    // Only episode 1 counts: 5 * 2.00 = 10.0 (episode 2 excluded)
     expect($pointsAfter)->toBe(10.0);
 });

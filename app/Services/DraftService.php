@@ -95,7 +95,7 @@ class DraftService
             'user_id' => $user->id,
             'top_model_id' => $topModel->id,
             'season_id' => $season->id,
-            'picked_at' => now(),
+            'picked_in_episode_id' => null,
             'pick_type' => PickType::Draft,
         ]);
 

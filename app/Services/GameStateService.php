@@ -40,7 +40,7 @@ class GameStateService
                     ->where('top_model_id', $topModel->id)
                     ->where('season_id', $season->id)
                     ->active()
-                    ->update(['dropped_at' => now()]);
+                    ->update(['dropped_after_episode_id' => $episode->id]);
 
                 GameEvent::create([
                     'season_id' => $season->id,
@@ -95,7 +95,7 @@ class GameStateService
             'user_id' => $user->id,
             'top_model_id' => $topModel->id,
             'season_id' => $season->id,
-            'picked_at' => now(),
+            'picked_in_episode_id' => $episode?->id,
             'pick_type' => PickType::FreeAgent,
         ]);
 
@@ -123,7 +123,7 @@ class GameStateService
             ->active()
             ->firstOrFail();
 
-        $playerModel->update(['dropped_at' => now()]);
+        $playerModel->update(['dropped_after_episode_id' => $episode?->id]);
 
         GameEvent::create([
             'season_id' => $season->id,
@@ -160,7 +160,7 @@ class GameStateService
             'user_id' => $user->id,
             'top_model_id' => $pickModel->id,
             'season_id' => $season->id,
-            'picked_at' => now(),
+            'picked_in_episode_id' => $episode?->id,
             'pick_type' => PickType::Swap,
         ]);
 

@@ -73,20 +73,36 @@ class ScoringService
 
     public function getPlayerPoints(User $user, Season $season): float
     {
-        $modelIds = $user->playerModels()
+        $playerModels = $user->playerModels()
             ->forSeason($season)
-            ->pluck('top_model_id')
-            ->unique();
+            ->with(['pickedInEpisode', 'droppedAfterEpisode'])
+            ->get();
 
-        if ($modelIds->isEmpty()) {
+        if ($playerModels->isEmpty()) {
             return 0;
         }
 
-        return (float) ActionLog::query()
-            ->whereIn('top_model_id', $modelIds)
-            ->join('actions', 'action_logs.action_id', '=', 'actions.id')
-            ->selectRaw('COALESCE(SUM(action_logs.count * actions.multiplier), 0) as total')
-            ->value('total');
+        $total = 0;
+
+        foreach ($playerModels as $playerModel) {
+            $query = ActionLog::query()
+                ->where('top_model_id', $playerModel->top_model_id)
+                ->join('actions', 'action_logs.action_id', '=', 'actions.id')
+                ->join('episodes', 'action_logs.episode_id', '=', 'episodes.id');
+
+            if ($playerModel->pickedInEpisode) {
+                $query->where('episodes.number', '>', $playerModel->pickedInEpisode->number);
+            }
+
+            if ($playerModel->droppedAfterEpisode) {
+                $query->where('episodes.number', '<=', $playerModel->droppedAfterEpisode->number);
+            }
+
+            $total += (float) $query->selectRaw('COALESCE(SUM(action_logs.count * actions.multiplier), 0) as total')
+                ->value('total');
+        }
+
+        return $total;
     }
 
     /**

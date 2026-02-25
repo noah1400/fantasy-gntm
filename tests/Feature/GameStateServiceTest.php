@@ -82,7 +82,7 @@ it('drops a model', function () {
         'season_id' => $this->season->id,
     ]);
 
-    $this->service->dropModel($player, $this->season, $model);
+    $this->service->dropModel($player, $this->season, $model, episode: $this->episode);
 
     expect(PlayerModel::where('user_id', $player->id)->active()->count())->toBe(0);
     expect(GameEvent::where('type', GameEventType::ModelDrop)->count())->toBe(1);
@@ -99,7 +99,7 @@ it('swaps a model', function () {
         'season_id' => $this->season->id,
     ]);
 
-    $newPm = $this->service->swapModel($player, $this->season, $dropModel, $pickModel);
+    $newPm = $this->service->swapModel($player, $this->season, $dropModel, $pickModel, $this->episode);
 
     expect($newPm->top_model_id)->toBe($pickModel->id);
     expect(PlayerModel::where('user_id', $player->id)->active()->count())->toBe(1);
@@ -131,7 +131,7 @@ it('endEpisode auto-drops PlayerModel records for eliminated TopModels', functio
     $this->service->endEpisode($this->episode, [$model->id]);
 
     expect(PlayerModel::where('user_id', $player->id)->active()->count())->toBe(0);
-    expect(PlayerModel::where('user_id', $player->id)->whereNotNull('dropped_at')->count())->toBe(1);
+    expect(PlayerModel::where('user_id', $player->id)->whereNotNull('dropped_after_episode_id')->count())->toBe(1);
 });
 
 it('getRequiredPostEpisodeActions returns free_agent_pick when free agents exist', function () {
