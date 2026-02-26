@@ -2,6 +2,7 @@
 
 namespace App\Filament\Player\Pages;
 
+use App\Enums\EpisodeStatus;
 use App\Enums\GameEventType;
 use App\Enums\SeasonStatus;
 use App\Models\Episode;
@@ -37,7 +38,7 @@ class PostEpisode extends Page
             return false;
         }
 
-        $episode = $season->episodes()->latest('id')->first();
+        $episode = $season->episodes()->where('status', EpisodeStatus::Ended)->latest('id')->first();
         if (! $episode) {
             return false;
         }
@@ -57,7 +58,7 @@ class PostEpisode extends Page
 
     public function getEpisodeProperty(): ?Episode
     {
-        return $this->season?->episodes()->latest('id')->first();
+        return $this->season?->episodes()->where('status', EpisodeStatus::Ended)->latest('id')->first();
     }
 
     public function getMyActionProperty(): ?array
@@ -163,11 +164,9 @@ class PostEpisode extends Page
             return;
         }
 
-        $episode = $this->season->episodes()->latest('id')->first();
-
         GameEvent::create([
             'season_id' => $this->season->id,
-            'episode_id' => $episode->id,
+            'episode_id' => $this->episode->id,
             'type' => GameEventType::SwapSkipped,
             'payload' => [
                 'user_id' => auth()->id(),

@@ -263,14 +263,13 @@ it('getRequiredPostEpisodeActions returns player_eliminated when no models and n
         'season_id' => $this->season->id,
     ]);
 
-    // Eliminate model1 — player1 has no models left and no free agents
+    // Eliminate model1 — player1 has no models left and no free agents → auto-eliminated
     $this->service->endEpisode($this->episode, [$model1->id]);
 
     $actions = $this->service->getRequiredPostEpisodeActions($this->season, $this->episode);
 
-    expect($actions)->toHaveCount(1)
-        ->and($actions[0]['action'])->toBe('player_eliminated')
-        ->and($actions[0]['user']->id)->toBe($player1->id);
+    expect($actions)->toBeEmpty('Auto-eliminated player should not appear in pending actions')
+        ->and($this->season->players()->where('user_id', $player1->id)->wherePivot('is_eliminated', true)->exists())->toBeTrue('Player should be auto-eliminated');
 });
 
 it('getRequiredPostEpisodeActions skips already completed actions', function () {
@@ -387,8 +386,9 @@ it('endEpisode sends player_eliminated notification when no models and no free a
 
     $this->service->endEpisode($this->episode, [$model1->id]);
 
-    expect($player1->unreadNotifications)->toHaveCount(1);
-    expect($player1->unreadNotifications->first()->data['title'])->toBe('You have been eliminated');
+    $player1->refresh();
+    expect($player1->unreadNotifications)->toHaveCount(0, 'No notification sent — player is auto-eliminated')
+        ->and($this->season->players()->where('user_id', $player1->id)->wherePivot('is_eliminated', true)->exists())->toBeTrue();
 });
 
 it('endEpisode sends mandatory_drop notification when no free agents but player has models', function () {

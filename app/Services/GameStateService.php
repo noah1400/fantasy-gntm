@@ -54,6 +54,33 @@ class GameStateService
             }
         }
 
+        // Auto-eliminate players who have no active models and no free agents
+        $seasonService = app(SeasonService::class);
+        $freeAgents = $seasonService->getFreeAgents($season);
+        $activePlayers = $season->players()->wherePivot('is_eliminated', false)->get();
+
+        foreach ($activePlayers as $player) {
+            $hadEliminated = PlayerModel::query()
+                ->where('user_id', $player->id)
+                ->where('season_id', $season->id)
+                ->whereIn('top_model_id', collect($eliminatedModelIds))
+                ->exists();
+
+            if (! $hadEliminated) {
+                continue;
+            }
+
+            $activeModelCount = PlayerModel::query()
+                ->where('user_id', $player->id)
+                ->where('season_id', $season->id)
+                ->active()
+                ->count();
+
+            if ($activeModelCount === 0 && $freeAgents->isEmpty()) {
+                $this->eliminatePlayer($player, $season, $episode);
+            }
+        }
+
         $actions = $this->getRequiredPostEpisodeActions($season, $episode);
         foreach ($actions as $action) {
             $notification = match ($action['action']) {
@@ -63,9 +90,6 @@ class GameStateService
                 'mandatory_drop' => Notification::make()
                     ->title('You must drop a model')
                     ->body('No free agents available. Head to Post-Episode Actions to drop a model.'),
-                'player_eliminated' => Notification::make()
-                    ->title('You have been eliminated')
-                    ->body('No models remaining and no free agents available.'),
                 default => null,
             };
 

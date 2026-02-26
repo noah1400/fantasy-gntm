@@ -167,6 +167,14 @@ it('can access pre-episode swap page when conditions are met', function () {
         'season_id' => $this->season->id,
     ]);
 
+    // Complete post-episode actions first (skip optional swap)
+    GameEvent::create([
+        'season_id' => $this->season->id,
+        'episode_id' => $this->endedEpisode->id,
+        'type' => GameEventType::SwapSkipped,
+        'payload' => ['user_id' => $this->player->id, 'user_name' => $this->player->name],
+    ]);
+
     expect(PreEpisodeSwap::canAccess())->toBeTrue();
 });
 
@@ -232,6 +240,25 @@ it('cannot access pre-episode swap page without ended episode', function () {
     expect(PreEpisodeSwap::canAccess())->toBeFalse();
 });
 
+it('cannot access pre-episode swap page while post-episode actions are pending', function () {
+    $this->actingAs($this->player);
+    Filament::setCurrentPanel(Filament::getPanel('player'));
+
+    $model = TopModel::factory()->create(['season_id' => $this->season->id]);
+    $freeAgent = TopModel::factory()->create(['season_id' => $this->season->id]);
+
+    PlayerModel::factory()->create([
+        'user_id' => $this->player->id,
+        'top_model_id' => $model->id,
+        'season_id' => $this->season->id,
+    ]);
+
+    // Eliminate the model — player now has a pending free_agent_pick action
+    $this->service->endEpisode($this->endedEpisode, [$model->id]);
+
+    expect(PreEpisodeSwap::canAccess())->toBeFalse();
+});
+
 it('cannot access pre-episode swap page when no free agents', function () {
     $this->actingAs($this->player);
     Filament::setCurrentPanel(Filament::getPanel('player'));
@@ -280,6 +307,14 @@ it('performs swap via livewire page', function () {
         'user_id' => $this->player->id,
         'top_model_id' => $dropModel->id,
         'season_id' => $this->season->id,
+    ]);
+
+    // Complete post-episode actions first
+    GameEvent::create([
+        'season_id' => $this->season->id,
+        'episode_id' => $this->endedEpisode->id,
+        'type' => GameEventType::SwapSkipped,
+        'payload' => ['user_id' => $this->player->id, 'user_name' => $this->player->name],
     ]);
 
     Livewire\Livewire::test(PreEpisodeSwap::class)
