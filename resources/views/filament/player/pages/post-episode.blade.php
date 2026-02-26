@@ -23,7 +23,7 @@
                                 class="flex flex-col items-center rounded-xl border border-gray-200 bg-white p-6 shadow-sm transition duration-75 hover:border-primary-500 hover:bg-gray-50 dark:border-white/10 dark:bg-gray-900 dark:hover:border-primary-500 dark:hover:bg-white/5"
                             >
                                 @if($model->image)
-                                    <img src="{{ Storage::url($model->image) }}" alt="{{ $model->name }}" class="mx-auto mb-2 size-16 rounded-full object-cover">
+                                    <img src="{{ Storage::disk('public')->url($model->image) }}" alt="{{ $model->name }}" class="mx-auto mb-2 size-16 rounded-full object-cover">
                                 @else
                                     <div class="mx-auto mb-2 flex size-16 items-center justify-center rounded-full bg-success-50 text-xl font-bold text-success-600 dark:bg-success-400/10 dark:text-success-400">
                                         {{ substr($model->name, 0, 1) }}
@@ -49,7 +49,7 @@
                                 class="flex flex-col items-center rounded-xl border border-gray-200 bg-white p-6 shadow-sm transition duration-75 hover:border-danger-500 hover:bg-gray-50 dark:border-white/10 dark:bg-gray-900 dark:hover:border-danger-500 dark:hover:bg-white/5"
                             >
                                 @if($pm->topModel->image)
-                                    <img src="{{ Storage::url($pm->topModel->image) }}" alt="{{ $pm->topModel->name }}" class="mx-auto mb-2 size-16 rounded-full object-cover">
+                                    <img src="{{ Storage::disk('public')->url($pm->topModel->image) }}" alt="{{ $pm->topModel->name }}" class="mx-auto mb-2 size-16 rounded-full object-cover">
                                 @else
                                     <div class="mx-auto mb-2 flex size-16 items-center justify-center rounded-full bg-danger-50 text-xl font-bold text-danger-600 dark:bg-danger-400/10 dark:text-danger-400">
                                         {{ substr($pm->topModel->name, 0, 1) }}

@@ -42,6 +42,7 @@ class TopModelResource extends Resource
                     ->disabled(fn (string $operation): bool => $operation === 'edit'),
                 FileUpload::make('image')
                     ->image()
+                    ->disk('public')
                     ->directory('top-models'),
                 Toggle::make('is_eliminated'),
             ]);
@@ -53,7 +54,8 @@ class TopModelResource extends Resource
             ->columns([
                 TextColumn::make('id')
                     ->sortable(),
-                ImageColumn::make('image'),
+                ImageColumn::make('image')
+                    ->disk('public'),
                 TextColumn::make('name')
                     ->searchable()
                     ->sortable(),

@@ -24,7 +24,7 @@
                             <td class="px-3 py-4 first-of-type:ps-6 last-of-type:pe-6">
                                 <div class="flex items-center gap-3">
                                     @if($entry['top_model']->image)
-                                        <img src="{{ Storage::url($entry['top_model']->image) }}" alt="{{ $entry['top_model']->name }}" class="size-8 rounded-full object-cover">
+                                        <img src="{{ Storage::disk('public')->url($entry['top_model']->image) }}" alt="{{ $entry['top_model']->name }}" class="size-8 rounded-full object-cover">
                                     @else
                                         <div class="flex size-8 items-center justify-center rounded-full bg-primary-50 text-xs font-bold text-primary-600 dark:bg-primary-400/10 dark:text-primary-400">
                                             {{ substr($entry['top_model']->name, 0, 1) }}

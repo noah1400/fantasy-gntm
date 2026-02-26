@@ -40,7 +40,7 @@
                                 wire:confirm="Pick {{ $model->name }}?"
                             >
                                 @if($model->image)
-                                    <img src="{{ Storage::url($model->image) }}" alt="{{ $model->name }}" class="mb-3 size-20 rounded-full object-cover">
+                                    <img src="{{ Storage::disk('public')->url($model->image) }}" alt="{{ $model->name }}" class="mb-3 size-20 rounded-full object-cover">
                                 @else
                                     <div class="mb-3 flex size-20 items-center justify-center rounded-full bg-primary-50 text-2xl font-bold text-primary-600 dark:bg-primary-400/10 dark:text-primary-400">
                                         {{ substr($model->name, 0, 1) }}

@@ -4,7 +4,7 @@
         <x-filament::section>
             <div class="flex items-center gap-4">
                 @if($this->topModel->image)
-                    <img src="{{ Storage::url($this->topModel->image) }}" alt="{{ $this->topModel->name }}" class="size-20 rounded-full object-cover">
+                    <img src="{{ Storage::disk('public')->url($this->topModel->image) }}" alt="{{ $this->topModel->name }}" class="size-20 rounded-full object-cover">
                 @else
                     <div class="flex size-20 items-center justify-center rounded-full bg-primary-50 text-2xl font-bold text-primary-600 dark:bg-primary-400/10 dark:text-primary-400">
                         {{ substr($this->topModel->name, 0, 1) }}

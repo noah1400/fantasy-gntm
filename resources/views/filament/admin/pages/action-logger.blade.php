@@ -30,7 +30,7 @@
                             class="flex flex-col items-center rounded-xl border border-gray-200 bg-white p-6 shadow-sm transition duration-75 hover:border-primary-500 hover:bg-gray-50 dark:border-white/10 dark:bg-gray-900 dark:hover:border-primary-500 dark:hover:bg-white/5"
                         >
                             @if($topModel->image)
-                                <img src="{{ Storage::url($topModel->image) }}" alt="{{ $topModel->name }}" class="mb-3 size-20 rounded-full object-cover">
+                                <img src="{{ Storage::disk('public')->url($topModel->image) }}" alt="{{ $topModel->name }}" class="mb-3 size-20 rounded-full object-cover">
                             @else
                                 <div class="mb-3 flex size-20 items-center justify-center rounded-full bg-gray-100 text-2xl font-bold text-gray-400 dark:bg-white/10">
                                     {{ substr($topModel->name, 0, 1) }}

@@ -9,7 +9,7 @@
                 @foreach($models as $entry)
                     <div class="flex items-center gap-3 rounded-lg bg-gray-50 p-3 dark:bg-white/5">
                         @if($entry['top_model']->image)
-                            <img src="{{ Storage::url($entry['top_model']->image) }}" alt="{{ $entry['top_model']->name }}" class="size-12 rounded-full object-cover">
+                            <img src="{{ Storage::disk('public')->url($entry['top_model']->image) }}" alt="{{ $entry['top_model']->name }}" class="size-12 rounded-full object-cover">
                         @else
                             <div class="flex size-12 items-center justify-center rounded-full bg-primary-50 font-bold text-primary-600 dark:bg-primary-400/10 dark:text-primary-400">
                                 {{ substr($entry['top_model']->name, 0, 1) }}
