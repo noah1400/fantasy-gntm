@@ -150,11 +150,9 @@ class PhaseService
             'started_at' => now(),
         ]);
 
-        // Only auto-check completion for simultaneous phases on activation
-        // Turn-based phases (PickRound, OptionalSwap) are checked after player actions
-        if ($phase->type->isSimultaneous()) {
-            $this->checkPhaseCompletion($phase);
-        }
+        // Check completion on activation for all phase types to handle vacuous cases
+        // (e.g. PickRound where nobody is eligible, or OptionalSwap with no free agents)
+        $this->checkPhaseCompletion($phase);
 
         if ($phase->fresh()->status === GamePhaseStatus::Active) {
             $this->notifyAffectedPlayers($phase);
@@ -213,10 +211,17 @@ class PhaseService
     {
         $user = User::findOrFail($phase->config['user_id']);
 
+        // Find the currently active non-instant phase to link the skip event to,
+        // so completion checks on that phase see the skip
+        $activePhase = $phase->season->gamePhases()
+            ->where('status', GamePhaseStatus::Active)
+            ->where('id', '!=', $phase->id)
+            ->first();
+
         GameEvent::create([
             'season_id' => $phase->season_id,
             'episode_id' => $phase->episode_id,
-            'game_phase_id' => $phase->id,
+            'game_phase_id' => $activePhase?->id ?? $phase->id,
             'type' => GameEventType::SwapSkipped,
             'payload' => [
                 'user_id' => $user->id,
@@ -224,6 +229,11 @@ class PhaseService
                 'skipped_by_admin' => true,
             ],
         ]);
+
+        // Re-check completion on the active phase since a player was skipped
+        if ($activePhase) {
+            $this->checkPhaseCompletion($activePhase);
+        }
     }
 
     private function executeRedistribute(GamePhase $phase): void
@@ -484,8 +494,6 @@ class PhaseService
             return true;
         }
 
-        $hasEligible = false;
-
         foreach ($activePlayers as $player) {
             $activeModelCount = PlayerModel::query()
                 ->where('user_id', $player->id)
@@ -496,8 +504,6 @@ class PhaseService
             if ($activeModelCount >= $eligibleBelow) {
                 continue;
             }
-
-            $hasEligible = true;
 
             $alreadyPicked = GameEvent::query()
                 ->where('game_phase_id', $phase->id)
@@ -510,8 +516,8 @@ class PhaseService
             }
         }
 
-        // Only auto-complete if there were eligible players and they all picked
-        return $hasEligible;
+        // All eligible players have picked (or nobody was eligible)
+        return true;
     }
 
     private function isOptionalSwapComplete(GamePhase $phase): bool
