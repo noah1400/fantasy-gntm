@@ -91,7 +91,7 @@ class EndEpisode extends Page
 
         Notification::make()
             ->title("Episode {$episode->number} ended")
-            ->body(count($this->eliminatedModelIds).' model(s) eliminated')
+            ->body(count($this->eliminatedModelIds).' model(s) eliminated. Go to Game Control to manage post-episode phases.')
             ->success()
             ->send();
 
