@@ -7,11 +7,11 @@ use App\Enums\GameEventType;
 use App\Enums\PickType;
 use App\Models\Episode;
 use App\Models\GameEvent;
+use App\Models\GamePhase;
 use App\Models\PlayerModel;
 use App\Models\Season;
 use App\Models\TopModel;
 use App\Models\User;
-use Filament\Notifications\Notification;
 
 class GameStateService
 {
@@ -53,53 +53,9 @@ class GameStateService
                 ]);
             }
         }
-
-        // Auto-eliminate players who have no active models and no free agents
-        $seasonService = app(SeasonService::class);
-        $freeAgents = $seasonService->getFreeAgents($season);
-        $activePlayers = $season->players()->wherePivot('is_eliminated', false)->get();
-
-        foreach ($activePlayers as $player) {
-            $hadEliminated = PlayerModel::query()
-                ->where('user_id', $player->id)
-                ->where('season_id', $season->id)
-                ->whereIn('top_model_id', collect($eliminatedModelIds))
-                ->exists();
-
-            if (! $hadEliminated) {
-                continue;
-            }
-
-            $activeModelCount = PlayerModel::query()
-                ->where('user_id', $player->id)
-                ->where('season_id', $season->id)
-                ->active()
-                ->count();
-
-            if ($activeModelCount === 0 && $freeAgents->isEmpty()) {
-                $this->eliminatePlayer($player, $season, $episode);
-            }
-        }
-
-        $actions = $this->getRequiredPostEpisodeActions($season, $episode);
-        foreach ($actions as $action) {
-            $notification = match ($action['action']) {
-                'free_agent_pick' => Notification::make()
-                    ->title('Pick a free agent')
-                    ->body('A model was eliminated. Head to Post-Episode Actions to pick a replacement.'),
-                'mandatory_drop' => Notification::make()
-                    ->title('You must drop a model')
-                    ->body('No free agents available. Head to Post-Episode Actions to drop a model.'),
-                default => null,
-            };
-
-            if ($notification) {
-                $notification->sendToDatabase($action['user']);
-            }
-        }
     }
 
-    public function pickFreeAgent(User $user, Season $season, TopModel $topModel, ?Episode $episode = null): PlayerModel
+    public function pickFreeAgent(User $user, Season $season, TopModel $topModel, ?Episode $episode = null, ?GamePhase $phase = null): PlayerModel
     {
         if ($topModel->is_eliminated) {
             throw new \InvalidArgumentException('Cannot pick an eliminated model.');
@@ -126,6 +82,7 @@ class GameStateService
         GameEvent::create([
             'season_id' => $season->id,
             'episode_id' => $episode?->id,
+            'game_phase_id' => $phase?->id,
             'type' => GameEventType::FreeAgentPick,
             'payload' => [
                 'user_id' => $user->id,
@@ -138,7 +95,7 @@ class GameStateService
         return $playerModel;
     }
 
-    public function dropModel(User $user, Season $season, TopModel $topModel, bool $isMandatory = false, ?Episode $episode = null): void
+    public function dropModel(User $user, Season $season, TopModel $topModel, bool $isMandatory = false, ?Episode $episode = null, ?GamePhase $phase = null): void
     {
         $playerModel = PlayerModel::query()
             ->where('user_id', $user->id)
@@ -152,6 +109,7 @@ class GameStateService
         GameEvent::create([
             'season_id' => $season->id,
             'episode_id' => $episode?->id,
+            'game_phase_id' => $phase?->id,
             'type' => $isMandatory ? GameEventType::MandatoryDrop : GameEventType::ModelDrop,
             'payload' => [
                 'user_id' => $user->id,
@@ -162,7 +120,7 @@ class GameStateService
         ]);
     }
 
-    public function swapModel(User $user, Season $season, TopModel $dropModel, TopModel $pickModel, ?Episode $episode = null): PlayerModel
+    public function swapModel(User $user, Season $season, TopModel $dropModel, TopModel $pickModel, ?Episode $episode = null, ?GamePhase $phase = null): PlayerModel
     {
         if ($pickModel->is_eliminated) {
             throw new \InvalidArgumentException('Cannot pick an eliminated model.');
@@ -178,7 +136,7 @@ class GameStateService
             throw new \InvalidArgumentException('This model is already owned by a player.');
         }
 
-        $this->dropModel($user, $season, $dropModel, episode: $episode);
+        $this->dropModel($user, $season, $dropModel, episode: $episode, phase: $phase);
 
         $playerModel = PlayerModel::create([
             'user_id' => $user->id,
@@ -191,6 +149,7 @@ class GameStateService
         GameEvent::create([
             'season_id' => $season->id,
             'episode_id' => $episode?->id,
+            'game_phase_id' => $phase?->id,
             'type' => GameEventType::ModelSwap,
             'payload' => [
                 'user_id' => $user->id,
@@ -285,149 +244,5 @@ class GameStateService
                 'user_name' => $user->name,
             ],
         ]);
-    }
-
-    /**
-     * Get players who need to perform a post-episode action, ordered by least points first.
-     *
-     * Phase flow: elimination → free_agent_pick → mandatory_drop → optional_swap → player_eliminated
-     *
-     * @return array<int, array{user: User, action: string, reason: string}>
-     */
-    public function getRequiredPostEpisodeActions(Season $season, Episode $episode): array
-    {
-        $actions = [];
-        $seasonService = app(SeasonService::class);
-        $activePlayers = $season->players()->wherePivot('is_eliminated', false)->get();
-
-        $eliminatedModels = TopModel::query()
-            ->where('season_id', $season->id)
-            ->where('eliminated_in_episode_id', $episode->id)
-            ->pluck('id');
-
-        $episodeEvents = GameEvent::query()
-            ->where('season_id', $season->id)
-            ->where('episode_id', $episode->id)
-            ->get();
-
-        $freeAgents = $seasonService->getFreeAgents($season);
-
-        // Phase 1: Players who had models eliminated need free_agent_pick or mandatory_drop
-        foreach ($activePlayers as $player) {
-            if ($this->playerHasEvent($episodeEvents, $player, GameEventType::PlayerEliminated)) {
-                continue;
-            }
-
-            $hadEliminated = PlayerModel::query()
-                ->where('user_id', $player->id)
-                ->where('season_id', $season->id)
-                ->whereIn('top_model_id', $eliminatedModels)
-                ->exists();
-
-            if (! $hadEliminated) {
-                continue;
-            }
-
-            $activeModelCount = PlayerModel::query()
-                ->where('user_id', $player->id)
-                ->where('season_id', $season->id)
-                ->active()
-                ->count();
-
-            if ($this->playerHasEvent($episodeEvents, $player, GameEventType::FreeAgentPick)
-                || $this->playerHasEvent($episodeEvents, $player, GameEventType::MandatoryDrop)) {
-                continue;
-            }
-
-            if ($freeAgents->isNotEmpty()) {
-                $actions[] = [
-                    'user' => $player,
-                    'action' => 'free_agent_pick',
-                    'reason' => 'Model eliminated — pick a free agent.',
-                ];
-
-                continue;
-            }
-
-            // No free agents available
-            if ($activeModelCount === 0) {
-                $actions[] = [
-                    'user' => $player,
-                    'action' => 'player_eliminated',
-                    'reason' => 'No models remaining and no free agents available.',
-                ];
-
-                continue;
-            }
-
-            $actions[] = [
-                'user' => $player,
-                'action' => 'mandatory_drop',
-                'reason' => 'No free agents — you must drop a model.',
-            ];
-        }
-
-        // Phase 2: After all mandatory drops complete, optional swap for lowest-score player
-        $pendingDrops = collect($actions)->where('action', 'mandatory_drop')->isNotEmpty();
-        $pendingPicks = collect($actions)->where('action', 'free_agent_pick')->isNotEmpty();
-
-        if (! $pendingDrops && ! $pendingPicks) {
-            $currentFreeAgents = $seasonService->getFreeAgents($season);
-
-            if ($currentFreeAgents->isNotEmpty()) {
-                $swapCandidates = [];
-
-                foreach ($activePlayers as $player) {
-                    if ($this->playerHasEvent($episodeEvents, $player, GameEventType::PlayerEliminated)) {
-                        continue;
-                    }
-
-                    if ($this->playerHasEvent($episodeEvents, $player, GameEventType::ModelSwap)
-                        || $this->playerHasEvent($episodeEvents, $player, GameEventType::SwapSkipped)) {
-                        continue;
-                    }
-
-                    $hasActiveModels = PlayerModel::query()
-                        ->where('user_id', $player->id)
-                        ->where('season_id', $season->id)
-                        ->active()
-                        ->exists();
-
-                    if ($hasActiveModels) {
-                        $swapCandidates[] = $player;
-                    }
-                }
-
-                // Only the lowest-score player gets the swap turn
-                usort($swapCandidates, fn ($a, $b) => $this->scoringService->getPlayerPoints($a, $season)
-                    <=> $this->scoringService->getPlayerPoints($b, $season));
-
-                if (! empty($swapCandidates)) {
-                    $actions[] = [
-                        'user' => $swapCandidates[0],
-                        'action' => 'optional_swap',
-                        'reason' => 'You may swap one model with a free agent.',
-                    ];
-                }
-            }
-        }
-
-        usort($actions, function ($a, $b) use ($season) {
-            return $this->scoringService->getPlayerPoints($a['user'], $season)
-                <=> $this->scoringService->getPlayerPoints($b['user'], $season);
-        });
-
-        return $actions;
-    }
-
-    /**
-     * @param  \Illuminate\Support\Collection<int, GameEvent>  $events
-     */
-    private function playerHasEvent(\Illuminate\Support\Collection $events, User $player, GameEventType $type): bool
-    {
-        return $events->contains(function (GameEvent $event) use ($player, $type) {
-            return $event->type === $type
-                && ($event->payload['user_id'] ?? null) === $player->id;
-        });
     }
 }

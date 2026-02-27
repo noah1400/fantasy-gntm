@@ -1,6 +1,5 @@
 <?php
 
-use App\Enums\EpisodeStatus;
 use App\Filament\Player\Pages\PostEpisode;
 use App\Models\Episode;
 use App\Models\PlayerModel;
@@ -43,7 +42,7 @@ it('shows draft room only during draft', function () {
     $this->get('/play/draft-room')->assertSuccessful();
 });
 
-it('post-episode targets the latest ended episode, not latest by ID', function () {
+it('post-episode page is deprecated and always returns false', function () {
     $season = Season::factory()->active()->create();
     $this->season = $season;
     $season->players()->attach($this->player->id);
@@ -53,15 +52,7 @@ it('post-episode targets the latest ended episode, not latest by ID', function (
         'number' => '1',
     ]);
 
-    // Create upcoming episode with higher ID
-    Episode::factory()->create([
-        'season_id' => $season->id,
-        'number' => '2',
-        'status' => EpisodeStatus::Upcoming,
-    ]);
-
     $model = TopModel::factory()->create(['season_id' => $season->id]);
-    $freeAgent = TopModel::factory()->create(['season_id' => $season->id]);
 
     PlayerModel::factory()->create([
         'user_id' => $this->player->id,
@@ -69,9 +60,8 @@ it('post-episode targets the latest ended episode, not latest by ID', function (
         'season_id' => $season->id,
     ]);
 
-    // Eliminate the model in ended episode — player needs free_agent_pick
     app(GameStateService::class)->endEpisode($endedEpisode, [$model->id]);
 
-    // PostEpisode should still be accessible despite upcoming episode having higher ID
-    expect(PostEpisode::canAccess())->toBeTrue();
+    // PostEpisode is deprecated — actions are now managed by PhaseService
+    expect(PostEpisode::canAccess())->toBeFalse();
 });

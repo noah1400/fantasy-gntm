@@ -53,12 +53,6 @@ class PreEpisodeSwap extends Page
             return false;
         }
 
-        // Block while post-episode actions are still pending
-        $pendingActions = app(GameStateService::class)->getRequiredPostEpisodeActions($season, $lastEndedEpisode);
-        if (! empty($pendingActions)) {
-            return false;
-        }
-
         $freeAgents = app(SeasonService::class)->getFreeAgents($season);
         if ($freeAgents->isEmpty()) {
             return false;

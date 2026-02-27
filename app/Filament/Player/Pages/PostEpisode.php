@@ -33,22 +33,8 @@ class PostEpisode extends Page
 
     public static function canAccess(): bool
     {
-        $season = Season::query()->where('status', SeasonStatus::Active)->latest()->first();
-        if (! $season) {
-            return false;
-        }
-
-        $episode = $season->episodes()->where('status', EpisodeStatus::Ended)->latest('id')->first();
-        if (! $episode) {
-            return false;
-        }
-
-        $actions = app(GameStateService::class)->getRequiredPostEpisodeActions(
-            $season,
-            $episode
-        );
-
-        return collect($actions)->contains(fn ($a) => $a['user']->id === auth()->id());
+        // Deprecated: post-episode actions are now managed by PhaseService
+        return false;
     }
 
     public function getSeasonProperty(): ?Season
@@ -63,13 +49,8 @@ class PostEpisode extends Page
 
     public function getMyActionProperty(): ?array
     {
-        if (! $this->season || ! $this->episode) {
-            return null;
-        }
-
-        $actions = app(GameStateService::class)->getRequiredPostEpisodeActions($this->season, $this->episode);
-
-        return collect($actions)->first(fn ($a) => $a['user']->id === auth()->id());
+        // Deprecated: post-episode actions are now managed by PhaseService
+        return null;
     }
 
     public function getFreeAgentsProperty(): Collection
@@ -191,20 +172,6 @@ class PostEpisode extends Page
 
     protected function notifySwapPhasePlayers(): void
     {
-        if (! $this->season || ! $this->episode) {
-            return;
-        }
-
-        $actions = app(GameStateService::class)->getRequiredPostEpisodeActions($this->season, $this->episode);
-        $onlySwaps = collect($actions)->every(fn ($a) => $a['action'] === 'optional_swap');
-
-        if ($onlySwaps && count($actions) > 0) {
-            foreach ($actions as $action) {
-                Notification::make()
-                    ->title('You may swap a model')
-                    ->body('Free agents are available. Head to Post-Episode Actions if you\'d like to swap.')
-                    ->sendToDatabase($action['user']);
-            }
-        }
+        // Deprecated: notifications are now managed by PhaseService
     }
 }
