@@ -77,41 +77,51 @@
             <x-filament::section>
                 <x-slot name="heading">Add Phase</x-slot>
 
-                <div class="flex flex-wrap items-end gap-4">
-                    <div>
-                        <x-filament::input.wrapper>
-                            <x-filament::input.select wire:model.live="newPhaseType">
-                                <option value="">-- Select Phase Type --</option>
-                                @foreach(\App\Enums\GamePhaseType::cases() as $type)
-                                    @if(! $type->isInstant())
-                                        <option value="{{ $type->value }}">{{ $type->getLabel() }}</option>
-                                    @endif
-                                @endforeach
-                            </x-filament::input.select>
-                        </x-filament::input.wrapper>
+                <div class="space-y-4">
+                    <div class="flex flex-wrap items-end gap-4">
+                        <div>
+                            <x-filament::input.wrapper>
+                                <x-filament::input.select wire:model.live="newPhaseType">
+                                    <option value="">-- Select Phase Type --</option>
+                                    @foreach(\App\Enums\GamePhaseType::cases() as $type)
+                                        @if(! $type->isInstant())
+                                            <option value="{{ $type->value }}">{{ $type->getLabel() }}</option>
+                                        @endif
+                                    @endforeach
+                                </x-filament::input.select>
+                            </x-filament::input.wrapper>
+                        </div>
+
+                        @if($this->newPhaseType === 'mandatory_drop')
+                            <div>
+                                <label class="text-sm font-medium text-gray-950 dark:text-white">Target model count</label>
+                                <x-filament::input.wrapper>
+                                    <x-filament::input type="number" wire:model="newPhaseTargetModelCount" min="0" max="5" />
+                                </x-filament::input.wrapper>
+                            </div>
+                        @endif
+
+                        @if($this->newPhaseType === 'pick_round')
+                            <div>
+                                <label class="text-sm font-medium text-gray-950 dark:text-white">Eligible below (models)</label>
+                                <x-filament::input.wrapper>
+                                    <x-filament::input type="number" wire:model="newPhaseEligibleBelow" min="1" max="5" />
+                                </x-filament::input.wrapper>
+                            </div>
+                        @endif
+
+                        <x-filament::button wire:click="addPhase" :disabled="!$this->newPhaseType">
+                            Add Phase
+                        </x-filament::button>
                     </div>
 
-                    @if($this->newPhaseType === 'mandatory_drop')
-                        <div>
-                            <label class="text-sm font-medium text-gray-950 dark:text-white">Target model count</label>
-                            <x-filament::input.wrapper>
-                                <x-filament::input type="number" wire:model="newPhaseTargetModelCount" min="0" max="5" />
-                            </x-filament::input.wrapper>
+                    @if($this->newPhaseType)
+                        <div class="rounded-lg border border-info-500/20 bg-info-50 p-3 dark:border-info-400/20 dark:bg-info-500/10">
+                            <p class="text-sm text-info-700 dark:text-info-300">
+                                {{ \App\Enums\GamePhaseType::from($this->newPhaseType)->getDescription() }}
+                            </p>
                         </div>
                     @endif
-
-                    @if($this->newPhaseType === 'pick_round')
-                        <div>
-                            <label class="text-sm font-medium text-gray-950 dark:text-white">Eligible below (models)</label>
-                            <x-filament::input.wrapper>
-                                <x-filament::input type="number" wire:model="newPhaseEligibleBelow" min="1" max="5" />
-                            </x-filament::input.wrapper>
-                        </div>
-                    @endif
-
-                    <x-filament::button wire:click="addPhase" :disabled="!$this->newPhaseType">
-                        Add Phase
-                    </x-filament::button>
                 </div>
             </x-filament::section>
 
