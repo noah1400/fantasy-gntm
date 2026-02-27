@@ -49,7 +49,7 @@ enum GamePhaseType: string implements HasColor, HasLabel
     {
         return match ($this) {
             self::MandatoryDrop => 'All players must drop models until they reach the target count. Everyone acts at the same time — no turn order. Auto-completes when all players are at or below the target.',
-            self::PickRound => 'Players with fewer models than the threshold pick a free agent. Turn order: lowest points goes first. Auto-completes when all eligible players have picked or no free agents remain.',
+            self::PickRound => 'Players with fewer models than the threshold pick a free agent one at a time. Turn order: lowest points goes first. Cycles back for anyone still below the threshold. Auto-completes when all players reach the threshold or no free agents remain.',
             self::OptionalSwap => 'Each player may swap one of their models for a free agent, or skip. Turn order: lowest points goes first. Auto-completes when all players have swapped or skipped.',
             self::TradingPhase => 'All players can freely swap any of their models for free agents at the same time. No turn order, no limit. Must be closed manually by admin.',
             self::ForceAssign => 'Instantly assigns a specific free agent to a player. Executes immediately — no player action needed.',

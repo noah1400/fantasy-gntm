@@ -339,6 +339,94 @@ it('PickRound: auto-completes when no free agents remain', function () {
     expect($phase->fresh()->status)->toBe(GamePhaseStatus::Completed);
 });
 
+it('PickRound: player with 0 models picks multiple times across rounds', function () {
+    $player = User::factory()->create();
+    $this->season->players()->attach($player->id);
+
+    // Player has 0 models, eligible_below = 2 → needs 2 picks
+    $free1 = TopModel::factory()->create(['season_id' => $this->season->id]);
+    $free2 = TopModel::factory()->create(['season_id' => $this->season->id]);
+
+    $phase = $this->service->createPhase($this->season, GamePhaseType::PickRound, ['eligible_below' => 2], $this->episode);
+
+    // First pick — player now has 1 model, still below threshold
+    $action = $this->service->getPlayerAction($this->season, $player);
+    expect($action['action'])->toBe('free_agent_pick');
+
+    $this->gs->pickFreeAgent($player, $this->season, $free1, $this->episode, $phase);
+    $this->service->checkPhaseCompletion($phase);
+    expect($phase->fresh()->status)->toBe(GamePhaseStatus::Active);
+
+    // Second pick — player should still be able to pick
+    $action = $this->service->getPlayerAction($this->season, $player);
+    expect($action['action'])->toBe('free_agent_pick');
+
+    $this->gs->pickFreeAgent($player, $this->season, $free2, $this->episode, $phase);
+    $this->service->checkPhaseCompletion($phase);
+
+    // Now at threshold — phase should complete
+    expect($phase->fresh()->status)->toBe(GamePhaseStatus::Completed);
+});
+
+it('PickRound: multi-player rounds cycle correctly (lowest points first each round)', function () {
+    $alice = User::factory()->create(['name' => 'Alice']);
+    $bob = User::factory()->create(['name' => 'Bob']);
+    $this->season->players()->attach([$alice->id, $bob->id]);
+
+    // Both have 0 models, eligible_below = 2 → each needs 2 picks
+    // Give Alice 10 pts via a scored model that was already dropped
+    $scoredModel = TopModel::factory()->create(['season_id' => $this->season->id]);
+    $pm = PlayerModel::factory()->create([
+        'user_id' => $alice->id,
+        'top_model_id' => $scoredModel->id,
+        'season_id' => $this->season->id,
+        'dropped_after_episode_id' => $this->episode->id,
+    ]);
+    $action = Action::factory()->create(['season_id' => $this->season->id, 'multiplier' => 1.00]);
+    ActionLog::factory()->create([
+        'action_id' => $action->id,
+        'top_model_id' => $scoredModel->id,
+        'episode_id' => $this->episode->id,
+        'count' => 10,
+    ]);
+    // Alice = 10 pts, 0 active models. Bob = 0 pts, 0 active models.
+
+    $free1 = TopModel::factory()->create(['season_id' => $this->season->id]);
+    $free2 = TopModel::factory()->create(['season_id' => $this->season->id]);
+    $free3 = TopModel::factory()->create(['season_id' => $this->season->id]);
+    $free4 = TopModel::factory()->create(['season_id' => $this->season->id]);
+
+    $phase = $this->service->createPhase($this->season, GamePhaseType::PickRound, ['eligible_below' => 2], $this->episode);
+
+    // Round 1: Bob first (0 pts < 10 pts)
+    expect($this->service->getPlayerAction($this->season, $bob)['action'])->toBe('free_agent_pick');
+    expect($this->service->getPlayerAction($this->season, $alice)['action'])->toBe('waiting');
+
+    $this->gs->pickFreeAgent($bob, $this->season, $free1, $this->episode, $phase);
+    $this->service->checkPhaseCompletion($phase);
+
+    // Round 1: Alice's turn now
+    expect($this->service->getPlayerAction($this->season, $alice)['action'])->toBe('free_agent_pick');
+
+    $this->gs->pickFreeAgent($alice, $this->season, $free2, $this->episode, $phase);
+    $this->service->checkPhaseCompletion($phase);
+    expect($phase->fresh()->status)->toBe(GamePhaseStatus::Active);
+
+    // Round 2: Bob first again (0 pts < 10 pts), both still need 1 more
+    expect($this->service->getPlayerAction($this->season, $bob)['action'])->toBe('free_agent_pick');
+    expect($this->service->getPlayerAction($this->season, $alice)['action'])->toBe('waiting');
+
+    $this->gs->pickFreeAgent($bob, $this->season, $free3, $this->episode, $phase);
+    $this->service->checkPhaseCompletion($phase);
+
+    // Round 2: Alice's turn
+    $this->gs->pickFreeAgent($alice, $this->season, $free4, $this->episode, $phase);
+    $this->service->checkPhaseCompletion($phase);
+
+    // Both at threshold — phase complete
+    expect($phase->fresh()->status)->toBe(GamePhaseStatus::Completed);
+});
+
 it('PickRound: auto-completes when no players are eligible', function () {
     $player = User::factory()->create();
     $this->season->players()->attach($player->id);

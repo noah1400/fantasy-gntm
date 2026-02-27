@@ -278,23 +278,24 @@ class PhaseService
             return null;
         }
 
-        // Check if this player already picked in this phase
-        $alreadyPicked = GameEvent::query()
-            ->where('game_phase_id', $phase->id)
-            ->where('type', GameEventType::FreeAgentPick)
-            ->whereJsonContains('payload->user_id', $user->id)
-            ->exists();
-
-        if ($alreadyPicked) {
-            return null;
-        }
-
         $freeAgents = $this->seasonService->getFreeAgents($season);
         if ($freeAgents->isEmpty()) {
             return null;
         }
 
-        // Turn-based: check if it's this player's turn (lowest points first among eligible)
+        // Round-based: check if this player has already picked in the current round
+        $myPicks = $this->countPlayerPicksInPhase($phase, $user);
+        $minPicks = $this->getMinPicksAmongEligible($phase, $season);
+
+        if ($myPicks > $minPicks) {
+            return [
+                'action' => 'waiting',
+                'phase' => $phase,
+                'reason' => 'Waiting for other players to pick.',
+            ];
+        }
+
+        // Turn-based: check if it's this player's turn (lowest points first among eligible in current round)
         $currentTurnUser = $this->getCurrentTurnPlayer($phase, $season);
 
         if (! $currentTurnUser || $currentTurnUser->id !== $user->id) {
@@ -383,10 +384,44 @@ class PhaseService
 
     // --- Turn order helpers ---
 
+    private function countPlayerPicksInPhase(GamePhase $phase, User $user): int
+    {
+        return GameEvent::query()
+            ->where('game_phase_id', $phase->id)
+            ->where('type', GameEventType::FreeAgentPick)
+            ->whereJsonContains('payload->user_id', $user->id)
+            ->count();
+    }
+
+    private function getMinPicksAmongEligible(GamePhase $phase, Season $season): int
+    {
+        $eligibleBelow = $phase->config['eligible_below'] ?? 2;
+        $activePlayers = $season->players()->wherePivot('is_eliminated', false)->get();
+        $minPicks = PHP_INT_MAX;
+
+        foreach ($activePlayers as $player) {
+            $activeModelCount = PlayerModel::query()
+                ->where('user_id', $player->id)
+                ->where('season_id', $season->id)
+                ->active()
+                ->count();
+
+            if ($activeModelCount >= $eligibleBelow) {
+                continue;
+            }
+
+            $picks = $this->countPlayerPicksInPhase($phase, $player);
+            $minPicks = min($minPicks, $picks);
+        }
+
+        return $minPicks === PHP_INT_MAX ? 0 : $minPicks;
+    }
+
     private function getCurrentTurnPlayer(GamePhase $phase, Season $season): ?User
     {
         $activePlayers = $season->players()->wherePivot('is_eliminated', false)->get();
         $eligibleBelow = $phase->config['eligible_below'] ?? 2;
+        $minPicks = $this->getMinPicksAmongEligible($phase, $season);
 
         $candidates = [];
         foreach ($activePlayers as $player) {
@@ -400,13 +435,9 @@ class PhaseService
                 continue;
             }
 
-            $alreadyPicked = GameEvent::query()
-                ->where('game_phase_id', $phase->id)
-                ->where('type', GameEventType::FreeAgentPick)
-                ->whereJsonContains('payload->user_id', $player->id)
-                ->exists();
-
-            if ($alreadyPicked) {
+            // Only candidates who haven't picked yet in the current round
+            $playerPicks = $this->countPlayerPicksInPhase($phase, $player);
+            if ($playerPicks > $minPicks) {
                 continue;
             }
 
@@ -494,6 +525,7 @@ class PhaseService
             return true;
         }
 
+        // Complete when all players have reached the threshold
         foreach ($activePlayers as $player) {
             $activeModelCount = PlayerModel::query()
                 ->where('user_id', $player->id)
@@ -501,22 +533,11 @@ class PhaseService
                 ->active()
                 ->count();
 
-            if ($activeModelCount >= $eligibleBelow) {
-                continue;
-            }
-
-            $alreadyPicked = GameEvent::query()
-                ->where('game_phase_id', $phase->id)
-                ->where('type', GameEventType::FreeAgentPick)
-                ->whereJsonContains('payload->user_id', $player->id)
-                ->exists();
-
-            if (! $alreadyPicked) {
+            if ($activeModelCount < $eligibleBelow) {
                 return false;
             }
         }
 
-        // All eligible players have picked (or nobody was eligible)
         return true;
     }
 
