@@ -199,13 +199,14 @@ class PhaseService
             $phase->season,
             $topModel,
             $phase->episode,
+            $phase,
         );
     }
 
     private function executeEliminatePlayer(GamePhase $phase): void
     {
         $user = User::findOrFail($phase->config['user_id']);
-        $this->gameStateService->eliminatePlayer($user, $phase->season, $phase->episode);
+        $this->gameStateService->eliminatePlayer($user, $phase->season, $phase->episode, $phase);
     }
 
     private function executeSkipPlayer(GamePhase $phase): void

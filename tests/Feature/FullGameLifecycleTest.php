@@ -89,9 +89,9 @@ test('full game lifecycle: draft → episodes → post-episode → pre-episode s
     $gs->pickFreeAgent($alice, $season, $m[7], $ep1);
     // Alice=[M6,M7] Bob=[M2,M5] Charlie=[M3,M4] Free=[M8]
 
-    // ── PRE-EPISODE SWAP (before EP2) ──────────────────────────
-    // Alice swaps M6 for M8 (no turn order — first come first served)
-    $gs->preEpisodeSwap($alice, $season, $m[6], $m[8], $ep2, $ep1);
+    // ── OPTIONAL SWAP (before EP2) ─────────────────────────────
+    // Alice swaps M6 for M8 via the new phase-based swap
+    $gs->swapModel($alice, $season, $m[6], $m[8], $ep1);
     // Alice=[M7,M8] Bob=[M2,M5] Charlie=[M3,M4] Free=[M6]
 
     // Bob and Charlie choose not to swap (no action needed — purely optional)

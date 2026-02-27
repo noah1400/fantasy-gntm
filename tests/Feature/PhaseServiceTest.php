@@ -128,6 +128,12 @@ it('executes instant phases immediately', function () {
 
     expect($phase->fresh()->status)->toBe(GamePhaseStatus::Completed)
         ->and($this->season->players()->where('user_id', $player->id)->wherePivot('is_eliminated', true)->exists())->toBeTrue();
+
+    // Verify game event is linked to the phase
+    $event = \App\Models\GameEvent::where('game_phase_id', $phase->id)
+        ->where('type', \App\Enums\GameEventType::PlayerEliminated)
+        ->first();
+    expect($event)->not->toBeNull();
 });
 
 it('force assign creates player model and completes instantly', function () {
@@ -143,6 +149,13 @@ it('force assign creates player model and completes instantly', function () {
 
     expect($phase->fresh()->status)->toBe(GamePhaseStatus::Completed)
         ->and(PlayerModel::where('user_id', $player->id)->where('top_model_id', $model->id)->active()->exists())->toBeTrue();
+
+    // Verify game event is linked to the phase (not orphaned)
+    $event = \App\Models\GameEvent::where('game_phase_id', $phase->id)
+        ->where('type', \App\Enums\GameEventType::FreeAgentPick)
+        ->first();
+    expect($event)->not->toBeNull()
+        ->and($event->payload['user_id'])->toBe($player->id);
 });
 
 it('getPlayerAction returns mandatory_drop for player with too many models', function () {
