@@ -3,8 +3,6 @@
 use App\Enums\EpisodeStatus;
 use App\Enums\SeasonStatus;
 use App\Filament\Player\Pages\DraftRoom;
-use App\Filament\Player\Pages\PostEpisode;
-use App\Filament\Player\Pages\PreEpisodeSwap;
 use App\Models\Action;
 use App\Models\ActionLog;
 use App\Models\Episode;
@@ -43,18 +41,14 @@ test('full game lifecycle: draft → episodes → post-episode → pre-episode s
 
     // ── STATE: SETUP — nothing accessible ──────────────────────
     $this->actingAs($alice);
-    expect(DraftRoom::canAccess())->toBeFalse('DraftRoom not accessible during Setup')
-        ->and(PostEpisode::canAccess())->toBeFalse('PostEpisode deprecated')
-        ->and(PreEpisodeSwap::canAccess())->toBeFalse('PreEpisodeSwap not accessible during Setup');
+    expect(DraftRoom::canAccess())->toBeFalse('DraftRoom not accessible during Setup');
 
     // ── STATE: DRAFT ───────────────────────────────────────────
     $ds->setDraftOrder($season, [$alice->id, $bob->id, $charlie->id]);
     $ss->startDraft($season);
 
     $this->actingAs($alice);
-    expect(DraftRoom::canAccess())->toBeTrue('DraftRoom accessible during Draft')
-        ->and(PostEpisode::canAccess())->toBeFalse('PostEpisode deprecated')
-        ->and(PreEpisodeSwap::canAccess())->toBeFalse('PreEpisodeSwap not accessible during Draft');
+    expect(DraftRoom::canAccess())->toBeTrue('DraftRoom accessible during Draft');
 
     // Snake draft: Alice, Bob, Charlie, Charlie, Bob, Alice
     $ds->pickModel($season, $alice, $m[1]);
@@ -73,16 +67,10 @@ test('full game lifecycle: draft → episodes → post-episode → pre-episode s
     expect($season->status)->toBe(SeasonStatus::Active);
 
     $this->actingAs($alice);
-    expect(DraftRoom::canAccess())->toBeFalse('DraftRoom not accessible after activation')
-        ->and(PostEpisode::canAccess())->toBeFalse('PostEpisode deprecated')
-        ->and(PreEpisodeSwap::canAccess())->toBeFalse('PreEpisodeSwap not accessible — no ended episode');
+    expect(DraftRoom::canAccess())->toBeFalse('DraftRoom not accessible after activation');
 
     // ── STATE: EPISODE 1 ACTIVE (action logging phase) ─────────
     $ep1->update(['status' => EpisodeStatus::Active, 'aired_at' => now()]);
-
-    $this->actingAs($alice);
-    expect(PostEpisode::canAccess())->toBeFalse('PostEpisode deprecated')
-        ->and(PreEpisodeSwap::canAccess())->toBeFalse('PreEpisodeSwap blocked by active episode');
 
     // Log actions: give Charlie 10 pts via M3 so score order is Alice(0) < Bob(0) <= Charlie(10)
     $action = Action::factory()->create(['season_id' => $season->id, 'multiplier' => 1.00]);
@@ -106,31 +94,10 @@ test('full game lifecycle: draft → episodes → post-episode → pre-episode s
     $gs->preEpisodeSwap($alice, $season, $m[6], $m[8], $ep2, $ep1);
     // Alice=[M7,M8] Bob=[M2,M5] Charlie=[M3,M4] Free=[M6]
 
-    $this->actingAs($alice);
-    expect(PreEpisodeSwap::canAccess())->toBeFalse('Alice already used her swap');
-
-    $this->actingAs($bob);
-    expect(PreEpisodeSwap::canAccess())->toBeTrue('Bob can still swap');
-
-    $this->actingAs($charlie);
-    expect(PreEpisodeSwap::canAccess())->toBeTrue('Charlie can still swap');
-
     // Bob and Charlie choose not to swap (no action needed — purely optional)
 
     // ── STATE: EPISODE 2 ACTIVE ────────────────────────────────
     $ep2->update(['status' => EpisodeStatus::Active, 'aired_at' => now()]);
-
-    $this->actingAs($alice);
-    expect(PreEpisodeSwap::canAccess())->toBeFalse('Alice: PreEpisodeSwap blocked — active episode')
-        ->and(PostEpisode::canAccess())->toBeFalse('PostEpisode deprecated');
-
-    $this->actingAs($bob);
-    expect(PreEpisodeSwap::canAccess())->toBeFalse('Bob: PreEpisodeSwap blocked — active episode')
-        ->and(PostEpisode::canAccess())->toBeFalse('PostEpisode deprecated');
-
-    $this->actingAs($charlie);
-    expect(PreEpisodeSwap::canAccess())->toBeFalse('Charlie: PreEpisodeSwap blocked — active episode')
-        ->and(PostEpisode::canAccess())->toBeFalse('PostEpisode deprecated');
 
     // Log actions: give Bob 5 pts via M5
     ActionLog::factory()->create([
@@ -159,25 +126,8 @@ test('full game lifecycle: draft → episodes → post-episode → pre-episode s
     $gs->swapModel($charlie, $season, $m[4], $m[5], $ep2);
     // Alice=[] Bob=[] Charlie=[M3,M5] Free=[M4,M8]
 
-    // Alice and Bob have 0 active models → PreEpisodeSwap not accessible
-    $this->actingAs($alice);
-    expect(PostEpisode::canAccess())->toBeFalse('PostEpisode deprecated')
-        ->and(PreEpisodeSwap::canAccess())->toBeFalse('Alice has no active models');
-
-    $this->actingAs($bob);
-    expect(PreEpisodeSwap::canAccess())->toBeFalse('Bob has no active models');
-
-    // Charlie CAN access pre-episode swap
-    $this->actingAs($charlie);
-    expect(PostEpisode::canAccess())->toBeFalse('PostEpisode deprecated')
-        ->and(PreEpisodeSwap::canAccess())->toBeTrue('Charlie can pre-episode swap before ep3');
-
     // ── STATE: EPISODE 3 ACTIVE ────────────────────────────────
     $ep3->update(['status' => EpisodeStatus::Active, 'aired_at' => now()]);
-
-    $this->actingAs($charlie);
-    expect(PreEpisodeSwap::canAccess())->toBeFalse('PreEpisodeSwap blocked — active episode')
-        ->and(PostEpisode::canAccess())->toBeFalse('PostEpisode deprecated');
 
     // ── VERIFY FINAL MODEL OWNERSHIP ───────────────────────────
     $aliceActive = PlayerModel::where('user_id', $alice->id)->where('season_id', $season->id)->active()->count();

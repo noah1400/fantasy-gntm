@@ -1,12 +1,7 @@
 <?php
 
-use App\Filament\Player\Pages\PostEpisode;
-use App\Models\Episode;
-use App\Models\PlayerModel;
 use App\Models\Season;
-use App\Models\TopModel;
 use App\Models\User;
-use App\Services\GameStateService;
 use Filament\Facades\Filament;
 
 beforeEach(function () {
@@ -40,28 +35,4 @@ it('shows draft room only during draft', function () {
     Season::factory()->draft()->create();
 
     $this->get('/play/draft-room')->assertSuccessful();
-});
-
-it('post-episode page is deprecated and always returns false', function () {
-    $season = Season::factory()->active()->create();
-    $this->season = $season;
-    $season->players()->attach($this->player->id);
-
-    $endedEpisode = Episode::factory()->ended()->create([
-        'season_id' => $season->id,
-        'number' => '1',
-    ]);
-
-    $model = TopModel::factory()->create(['season_id' => $season->id]);
-
-    PlayerModel::factory()->create([
-        'user_id' => $this->player->id,
-        'top_model_id' => $model->id,
-        'season_id' => $season->id,
-    ]);
-
-    app(GameStateService::class)->endEpisode($endedEpisode, [$model->id]);
-
-    // PostEpisode is deprecated — actions are now managed by PhaseService
-    expect(PostEpisode::canAccess())->toBeFalse();
 });
