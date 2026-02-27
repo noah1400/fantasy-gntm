@@ -63,6 +63,11 @@ class Season extends Model
         return $this->hasMany(GameEvent::class);
     }
 
+    public function gamePhases(): HasMany
+    {
+        return $this->hasMany(GamePhase::class);
+    }
+
     public function players(): BelongsToMany
     {
         return $this->belongsToMany(User::class)->withPivot('is_eliminated')->withTimestamps();

@@ -14,6 +14,7 @@ class GameEvent extends Model
     protected $fillable = [
         'season_id',
         'episode_id',
+        'game_phase_id',
         'type',
         'payload',
     ];
@@ -34,5 +35,10 @@ class GameEvent extends Model
     public function episode(): BelongsTo
     {
         return $this->belongsTo(Episode::class);
+    }
+
+    public function gamePhase(): BelongsTo
+    {
+        return $this->belongsTo(GamePhase::class);
     }
 }
