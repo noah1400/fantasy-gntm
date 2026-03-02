@@ -134,6 +134,16 @@
                     <div class="space-y-3 rounded-lg bg-white p-4 shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
                         <h3 class="text-sm font-medium text-gray-950 dark:text-white">Force Assign Model</h3>
                         <x-filament::input.wrapper>
+                            <x-filament::input.select wire:model.live="forceAssignEpisodeId">
+                                <option value="">-- Ended Episode --</option>
+                                @foreach($this->endedEpisodes as $episode)
+                                    <option value="{{ $episode->id }}">
+                                        Episode {{ $episode->number }}@if($episode->title) - {{ $episode->title }}@endif
+                                    </option>
+                                @endforeach
+                            </x-filament::input.select>
+                        </x-filament::input.wrapper>
+                        <x-filament::input.wrapper>
                             <x-filament::input.select wire:model="forceAssignUserId">
                                 <option value="">-- Player --</option>
                                 @foreach($this->playerStatus as $status)
@@ -149,7 +159,21 @@
                                 @endforeach
                             </x-filament::input.select>
                         </x-filament::input.wrapper>
-                        <x-filament::button size="sm" wire:click="forceAssign" wire:confirm="Force assign this model?">
+
+                        <div class="rounded-lg border border-info-500/20 bg-info-50 p-3 dark:border-info-400/20 dark:bg-info-500/10">
+                            <p class="text-xs text-info-700 dark:text-info-300">{{ $this->forceAssignEpisodeExplanation }}</p>
+                        </div>
+
+                        @if($this->endedEpisodes->isEmpty())
+                            <p class="text-xs text-warning-700 dark:text-warning-300">No ended episode available. End an episode first to use Force Assign safely.</p>
+                        @endif
+
+                        <x-filament::button
+                            size="sm"
+                            wire:click="forceAssign"
+                            wire:confirm="Force assign this model?"
+                            :disabled="!$this->forceAssignEpisodeId || !$this->forceAssignUserId || !$this->forceAssignModelId"
+                        >
                             Assign
                         </x-filament::button>
                     </div>

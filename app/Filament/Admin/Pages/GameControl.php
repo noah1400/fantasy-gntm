@@ -6,6 +6,7 @@ use App\Enums\EpisodeStatus;
 use App\Enums\GamePhaseStatus;
 use App\Enums\GamePhaseType;
 use App\Enums\SeasonStatus;
+use App\Models\Episode;
 use App\Models\GamePhase;
 use App\Models\PlayerModel;
 use App\Models\Season;
@@ -43,12 +44,20 @@ class GameControl extends Page
 
     public ?int $forceAssignModelId = null;
 
+    public ?int $forceAssignEpisodeId = null;
+
     public ?int $eliminatePlayerId = null;
 
     public function mount(): void
     {
         $season = Season::query()->where('status', SeasonStatus::Active)->latest()->first();
         $this->selectedSeasonId = $season?->id;
+        $this->syncForceAssignEpisodeSelection();
+    }
+
+    public function updatedSelectedSeasonId(?int $seasonId): void
+    {
+        $this->syncForceAssignEpisodeSelection();
     }
 
     public function getSeasonProperty(): ?Season
@@ -90,6 +99,44 @@ class GameControl extends Page
             ->whereIn('status', [GamePhaseStatus::Active, GamePhaseStatus::Pending])
             ->orderBy('position')
             ->get();
+    }
+
+    public function getEndedEpisodesProperty(): Collection
+    {
+        if (! $this->season) {
+            return collect();
+        }
+
+        return $this->season->episodes()
+            ->where('status', EpisodeStatus::Ended)
+            ->latest('id')
+            ->get();
+    }
+
+    public function getSelectedForceAssignEpisodeProperty(): ?Episode
+    {
+        if (! $this->season || ! $this->forceAssignEpisodeId) {
+            return null;
+        }
+
+        return $this->season->episodes()
+            ->where('status', EpisodeStatus::Ended)
+            ->where('id', $this->forceAssignEpisodeId)
+            ->first();
+    }
+
+    public function getForceAssignEpisodeExplanationProperty(): string
+    {
+        if (! $this->selectedForceAssignEpisode) {
+            return 'Select an ended episode to define from when this ownership starts scoring. Without an ended episode, force assign is blocked.';
+        }
+
+        $episodeNumber = (string) $this->selectedForceAssignEpisode->number;
+        $nextEpisodeLabel = is_numeric($episodeNumber)
+            ? 'Episode '.((int) $episodeNumber + 1)
+            : 'the next episode';
+
+        return "Selected episode: {$episodeNumber}. This assignment is treated as picked after Episode {$episodeNumber}. Points from Episode {$episodeNumber} and earlier do not count for this player. Points start counting from {$nextEpisodeLabel}.";
     }
 
     public function getCompletedPhasesProperty(): Collection
@@ -148,7 +195,22 @@ class GameControl extends Page
             return;
         }
 
-        $episode = $this->season->episodes()->where('status', EpisodeStatus::Ended)->latest('id')->first();
+        if (! $this->forceAssignEpisodeId) {
+            Notification::make()->title('Select an ended episode.')->warning()->send();
+
+            return;
+        }
+
+        $episode = $this->season->episodes()
+            ->where('status', EpisodeStatus::Ended)
+            ->where('id', $this->forceAssignEpisodeId)
+            ->first();
+
+        if (! $episode) {
+            Notification::make()->title('Selected episode is invalid for this season.')->warning()->send();
+
+            return;
+        }
 
         app(PhaseService::class)->createPhase(
             $this->season,
@@ -157,7 +219,10 @@ class GameControl extends Page
             $episode,
         );
 
-        Notification::make()->title('Model assigned.')->success()->send();
+        Notification::make()
+            ->title("Model assigned (from after Episode {$episode->number}).")
+            ->success()
+            ->send();
         $this->forceAssignUserId = null;
         $this->forceAssignModelId = null;
     }
@@ -178,5 +243,22 @@ class GameControl extends Page
 
         Notification::make()->title('Player eliminated.')->success()->send();
         $this->eliminatePlayerId = null;
+    }
+
+    private function syncForceAssignEpisodeSelection(): void
+    {
+        $this->forceAssignEpisodeId = $this->resolveDefaultForceAssignEpisodeId();
+    }
+
+    private function resolveDefaultForceAssignEpisodeId(): ?int
+    {
+        if (! $this->season) {
+            return null;
+        }
+
+        return $this->season->episodes()
+            ->where('status', EpisodeStatus::Ended)
+            ->latest('id')
+            ->value('id');
     }
 }
