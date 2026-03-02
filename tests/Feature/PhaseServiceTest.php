@@ -14,6 +14,7 @@ use App\Models\TopModel;
 use App\Models\User;
 use App\Services\GameStateService;
 use App\Services\PhaseService;
+use App\Services\ScoringService;
 
 beforeEach(function () {
     $this->service = app(PhaseService::class);
@@ -674,6 +675,58 @@ it('ForceAssign: assigns model and completes instantly', function () {
         ->first();
     expect($event)->not->toBeNull()
         ->and($event->payload['user_id'])->toBe($player->id);
+});
+
+it('ForceAssign: without explicit episode does not replay historical points', function () {
+    $player = User::factory()->create();
+    $this->season->players()->attach($player->id);
+
+    $episode1 = Episode::factory()->ended()->create([
+        'season_id' => $this->season->id,
+        'number' => 1,
+    ]);
+    $episode2 = Episode::factory()->ended()->create([
+        'season_id' => $this->season->id,
+        'number' => 2,
+    ]);
+
+    $model = TopModel::factory()->create(['season_id' => $this->season->id]);
+
+    $action = Action::factory()->create([
+        'season_id' => $this->season->id,
+        'multiplier' => 1.0,
+    ]);
+
+    ActionLog::factory()->create([
+        'action_id' => $action->id,
+        'top_model_id' => $model->id,
+        'episode_id' => $episode1->id,
+        'count' => 10,
+    ]);
+
+    PlayerModel::factory()->dropped($episode1)->create([
+        'user_id' => $player->id,
+        'top_model_id' => $model->id,
+        'season_id' => $this->season->id,
+    ]);
+
+    $scoring = app(ScoringService::class);
+    expect($scoring->getPlayerPoints($player, $this->season))->toBe(10.0);
+
+    $this->service->createPhase(
+        $this->season,
+        GamePhaseType::ForceAssign,
+        ['user_id' => $player->id, 'top_model_id' => $model->id],
+    );
+
+    $activeOwnership = PlayerModel::query()
+        ->where('user_id', $player->id)
+        ->where('top_model_id', $model->id)
+        ->active()
+        ->firstOrFail();
+
+    expect($activeOwnership->picked_in_episode_id)->toBe($episode2->id)
+        ->and($scoring->getPlayerPoints($player, $this->season))->toBe(10.0);
 });
 
 // ── EliminatePlayer: "Instantly eliminates a player from the season.

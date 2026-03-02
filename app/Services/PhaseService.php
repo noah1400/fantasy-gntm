@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\EpisodeStatus;
 use App\Enums\GameEventType;
 use App\Enums\GamePhaseStatus;
 use App\Enums\GamePhaseType;
@@ -191,12 +192,16 @@ class PhaseService
     {
         $user = User::findOrFail($phase->config['user_id']);
         $topModel = TopModel::findOrFail($phase->config['top_model_id']);
+        $episode = $phase->episode ?? $phase->season->episodes()
+            ->where('status', EpisodeStatus::Ended)
+            ->latest('id')
+            ->first();
 
         $this->gameStateService->pickFreeAgent(
             $user,
             $phase->season,
             $topModel,
-            $phase->episode,
+            $episode,
             $phase,
         );
     }

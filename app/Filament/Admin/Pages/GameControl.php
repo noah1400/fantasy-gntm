@@ -148,10 +148,13 @@ class GameControl extends Page
             return;
         }
 
+        $episode = $this->season->episodes()->where('status', EpisodeStatus::Ended)->latest('id')->first();
+
         app(PhaseService::class)->createPhase(
             $this->season,
             GamePhaseType::ForceAssign,
             ['user_id' => $this->forceAssignUserId, 'top_model_id' => $this->forceAssignModelId],
+            $episode,
         );
 
         Notification::make()->title('Model assigned.')->success()->send();
