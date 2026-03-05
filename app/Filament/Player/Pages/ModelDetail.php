@@ -19,33 +19,33 @@ class ModelDetail extends Page
 
     protected string $view = 'filament.player.pages.model-detail';
 
-    public TopModel $topModel;
+    public TopModel $modelRecord;
 
     public function mount(string $topModel): void
     {
-        $this->topModel = TopModel::query()->where('slug', $topModel)->firstOrFail();
+        $this->modelRecord = TopModel::query()->where('slug', $topModel)->firstOrFail();
     }
 
     public function getTitle(): string
     {
-        return $this->topModel->name;
+        return $this->modelRecord->name;
     }
 
     public function getTotalPoints(): float
     {
-        return app(ScoringService::class)->getModelPoints($this->topModel);
+        return app(ScoringService::class)->getModelPoints($this->modelRecord);
     }
 
     public function getEpisodeBreakdown(): Collection
     {
-        $season = $this->topModel->season;
+        $season = $this->modelRecord->season;
 
         return $season->episodes()
             ->orderBy('number')
             ->get()
             ->map(function ($episode) {
                 $logs = ActionLog::query()
-                    ->where('top_model_id', $this->topModel->id)
+                    ->where('top_model_id', $this->modelRecord->id)
                     ->where('episode_id', $episode->id)
                     ->with('action')
                     ->get();
