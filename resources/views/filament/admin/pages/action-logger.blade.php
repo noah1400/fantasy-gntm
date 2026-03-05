@@ -68,5 +68,72 @@
                 </div>
             </x-filament::section>
         @endif
+
+        <x-filament::section>
+            <x-slot name="heading">Tracked Actions</x-slot>
+            <x-slot name="description">
+                @if($this->selectedEpisodeId)
+                    Showing tracked actions for the selected episode.
+                @else
+                    Select an episode to review and correct tracked actions.
+                @endif
+            </x-slot>
+
+            @if($this->trackedActionLogs->isNotEmpty())
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200 dark:divide-white/10">
+                        <thead class="bg-gray-50 dark:bg-white/5">
+                            <tr>
+                                <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-600 dark:text-gray-300">Model</th>
+                                <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-600 dark:text-gray-300">Action</th>
+                                <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-600 dark:text-gray-300">Count</th>
+                                <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-600 dark:text-gray-300">Points</th>
+                                <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-600 dark:text-gray-300">Adjust</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100 bg-white dark:divide-white/5 dark:bg-transparent">
+                            @foreach($this->trackedActionLogs as $log)
+                                <tr wire:key="tracked-action-{{ $log->id }}">
+                                    <td class="px-3 py-2 text-sm text-gray-900 dark:text-white">{{ $log->topModel?->name ?? 'Unknown' }}</td>
+                                    <td class="px-3 py-2 text-sm text-gray-900 dark:text-white">{{ $log->action?->name ?? 'Unknown' }}</td>
+                                    <td class="px-3 py-2 text-sm text-gray-700 dark:text-gray-200">{{ $log->count }}</td>
+                                    <td class="px-3 py-2 text-sm text-gray-700 dark:text-gray-200">{{ number_format($log->count * (float) ($log->action?->multiplier ?? 0), 2) }}</td>
+                                    <td class="px-3 py-2">
+                                        <div class="flex items-center gap-2">
+                                            @if($log->count === 1)
+                                                <x-filament::button
+                                                    size="sm"
+                                                    color="gray"
+                                                    wire:click="adjustTrackedActionCount({{ $log->id }}, -1)"
+                                                    wire:confirm="Count is 1. This will remove the log entry. Continue?"
+                                                >
+                                                    -1
+                                                </x-filament::button>
+                                            @else
+                                                <x-filament::button
+                                                    size="sm"
+                                                    color="gray"
+                                                    wire:click="adjustTrackedActionCount({{ $log->id }}, -1)"
+                                                >
+                                                    -1
+                                                </x-filament::button>
+                                            @endif
+                                            <x-filament::button
+                                                size="sm"
+                                                wire:click="adjustTrackedActionCount({{ $log->id }}, 1)"
+                                            >
+                                                +1
+                                            </x-filament::button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @else
+                <p class="text-sm text-gray-500 dark:text-gray-400">No tracked actions found for this episode.</p>
+            @endif
+        </x-filament::section>
     </div>
 </x-filament-panels::page>

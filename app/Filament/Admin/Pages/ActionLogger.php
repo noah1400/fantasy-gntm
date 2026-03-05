@@ -4,6 +4,7 @@ namespace App\Filament\Admin\Pages;
 
 use App\Enums\EpisodeStatus;
 use App\Models\Action;
+use App\Models\ActionLog;
 use App\Models\Episode;
 use App\Models\Season;
 use App\Models\TopModel;
@@ -82,6 +83,27 @@ class ActionLogger extends Page
             ->get();
     }
 
+    public function getTrackedActionLogsProperty(): Collection
+    {
+        if (! $this->selectedSeasonId) {
+            return collect();
+        }
+
+        $query = ActionLog::query()
+            ->whereHas('action', function ($actionQuery): void {
+                $actionQuery->where('season_id', $this->selectedSeasonId);
+            })
+            ->with(['action', 'topModel', 'episode'])
+            ->orderByDesc('updated_at')
+            ->orderByDesc('id');
+
+        if ($this->selectedEpisodeId) {
+            $query->where('episode_id', $this->selectedEpisodeId);
+        }
+
+        return $query->get();
+    }
+
     public function selectModel(int $topModelId): void
     {
         $this->selectedTopModelId = $topModelId;
@@ -141,5 +163,68 @@ class ActionLogger extends Page
             ->send();
 
         $this->lastAction = null;
+    }
+
+    public function adjustTrackedActionCount(int $actionLogId, int $delta): void
+    {
+        if ($delta === 0) {
+            return;
+        }
+
+        $actionLog = ActionLog::query()
+            ->with(['action', 'topModel'])
+            ->find($actionLogId);
+
+        if (! $actionLog || ! $actionLog->action) {
+            Notification::make()
+                ->title('Action log not found')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        if ((int) $actionLog->action->season_id !== (int) $this->selectedSeasonId) {
+            Notification::make()
+                ->title('Action log does not belong to selected season')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        if ($this->selectedEpisodeId && $actionLog->episode_id !== $this->selectedEpisodeId) {
+            Notification::make()
+                ->title('Action log does not belong to selected episode')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        $updatedCount = $actionLog->count + $delta;
+
+        if ($updatedCount <= 0) {
+            $actionName = $actionLog->action->name;
+            $modelName = $actionLog->topModel?->name ?? 'model';
+            $actionLog->delete();
+
+            Notification::make()
+                ->title("Removed {$actionName} for {$modelName}")
+                ->success()
+                ->send();
+
+            return;
+        }
+
+        $actionLog->update(['count' => $updatedCount]);
+
+        $actionName = $actionLog->action->name;
+        $modelName = $actionLog->topModel?->name ?? 'model';
+
+        Notification::make()
+            ->title("Updated {$actionName} for {$modelName} to {$updatedCount}")
+            ->success()
+            ->send();
     }
 }
