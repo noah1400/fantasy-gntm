@@ -289,6 +289,170 @@ it('returns scoreboard sorted by points descending', function () {
         ->and($scoreboard[1]['points'])->toBe(4.0);
 });
 
+it('calculates player model points respecting ownership window', function () {
+    $episode2 = Episode::factory()->create(['season_id' => $this->season->id, 'number' => 2]);
+
+    $player = User::factory()->create();
+    $this->season->players()->attach($player->id);
+
+    $playerModel = PlayerModel::factory()->pickedIn($this->episode)->create([
+        'user_id' => $player->id,
+        'top_model_id' => $this->topModel->id,
+        'season_id' => $this->season->id,
+    ]);
+
+    // Episode 1 points (should NOT count — picked in episode 1, so only > 1)
+    ActionLog::factory()->create([
+        'action_id' => $this->action->id,
+        'top_model_id' => $this->topModel->id,
+        'episode_id' => $this->episode->id,
+        'count' => 3,
+    ]);
+    // Episode 2 points (should count)
+    ActionLog::factory()->create([
+        'action_id' => $this->action->id,
+        'top_model_id' => $this->topModel->id,
+        'episode_id' => $episode2->id,
+        'count' => 4,
+    ]);
+
+    $points = $this->service->getPlayerModelPoints($playerModel);
+
+    // Only episode 2: 4 * 2.00 = 8.0
+    expect($points)->toBe(8.0);
+});
+
+it('scores correctly after mid-season swap: old model keeps pre-swap points, new model gets none yet', function () {
+    $episode2 = Episode::factory()->create(['season_id' => $this->season->id, 'number' => 2]);
+
+    $player = User::factory()->create();
+    $this->season->players()->attach($player->id);
+
+    $oldModel = $this->topModel;
+    $newModel = TopModel::factory()->create(['season_id' => $this->season->id]);
+
+    // Draft-picked old model, dropped after episode 2 (swap)
+    $oldPlayerModel = PlayerModel::factory()->dropped($episode2)->create([
+        'user_id' => $player->id,
+        'top_model_id' => $oldModel->id,
+        'season_id' => $this->season->id,
+    ]);
+
+    // New model picked in episode 2 (swap)
+    $newPlayerModel = PlayerModel::factory()->pickedIn($episode2)->create([
+        'user_id' => $player->id,
+        'top_model_id' => $newModel->id,
+        'season_id' => $this->season->id,
+    ]);
+
+    // Old model earned 3 points in Ep 1, 5 in Ep 2
+    ActionLog::factory()->create([
+        'action_id' => $this->action->id,
+        'top_model_id' => $oldModel->id,
+        'episode_id' => $this->episode->id,
+        'count' => 3,
+    ]);
+    ActionLog::factory()->create([
+        'action_id' => $this->action->id,
+        'top_model_id' => $oldModel->id,
+        'episode_id' => $episode2->id,
+        'count' => 5,
+    ]);
+
+    // New model earned 4 points in Ep 1, 2 in Ep 2
+    ActionLog::factory()->create([
+        'action_id' => $this->action->id,
+        'top_model_id' => $newModel->id,
+        'episode_id' => $this->episode->id,
+        'count' => 4,
+    ]);
+    ActionLog::factory()->create([
+        'action_id' => $this->action->id,
+        'top_model_id' => $newModel->id,
+        'episode_id' => $episode2->id,
+        'count' => 2,
+    ]);
+
+    // Old model: draft pick, dropped after ep 2 → episodes 1-2 count
+    $oldPoints = $this->service->getPlayerModelPoints($oldPlayerModel);
+    expect($oldPoints)->toBe(16.0); // (3 + 5) * 2.00
+
+    // New model: picked in ep 2 → only episodes > 2 count → 0 points (no ep 3 yet)
+    $newPoints = $this->service->getPlayerModelPoints($newPlayerModel);
+    expect($newPoints)->toBe(0.0);
+
+    // Total player points: old model's ep 1-2 + new model's ep 3+ = 16 + 0
+    $totalPoints = $this->service->getPlayerPoints($player, $this->season);
+    expect($totalPoints)->toBe(16.0);
+
+    // getModelPoints (without ownership) would wrongly show new model's total
+    $newModelTotalPoints = $this->service->getModelPoints($newModel);
+    expect($newModelTotalPoints)->toBe(12.0); // (4 + 2) * 2.00 — NOT what player should see
+});
+
+it('scores correctly when player owns same model twice in a season', function () {
+    $episode2 = Episode::factory()->create(['season_id' => $this->season->id, 'number' => 2]);
+    $episode3 = Episode::factory()->create(['season_id' => $this->season->id, 'number' => 3]);
+    $episode4 = Episode::factory()->create(['season_id' => $this->season->id, 'number' => 4]);
+    $episode5 = Episode::factory()->create(['season_id' => $this->season->id, 'number' => 5]);
+
+    $player = User::factory()->create();
+    $this->season->players()->attach($player->id);
+
+    // First ownership: draft pick, dropped after episode 2
+    PlayerModel::factory()->dropped($episode2)->create([
+        'user_id' => $player->id,
+        'top_model_id' => $this->topModel->id,
+        'season_id' => $this->season->id,
+    ]);
+
+    // Second ownership: picked again in episode 4 (swap)
+    PlayerModel::factory()->pickedIn($episode4)->create([
+        'user_id' => $player->id,
+        'top_model_id' => $this->topModel->id,
+        'season_id' => $this->season->id,
+    ]);
+
+    // Points per episode
+    ActionLog::factory()->create([
+        'action_id' => $this->action->id,
+        'top_model_id' => $this->topModel->id,
+        'episode_id' => $this->episode->id,
+        'count' => 1, // Ep 1: owned → counts
+    ]);
+    ActionLog::factory()->create([
+        'action_id' => $this->action->id,
+        'top_model_id' => $this->topModel->id,
+        'episode_id' => $episode2->id,
+        'count' => 2, // Ep 2: owned → counts
+    ]);
+    ActionLog::factory()->create([
+        'action_id' => $this->action->id,
+        'top_model_id' => $this->topModel->id,
+        'episode_id' => $episode3->id,
+        'count' => 3, // Ep 3: NOT owned → does not count
+    ]);
+    ActionLog::factory()->create([
+        'action_id' => $this->action->id,
+        'top_model_id' => $this->topModel->id,
+        'episode_id' => $episode4->id,
+        'count' => 4, // Ep 4: NOT owned (picked_in = 4, so > 4 only) → does not count
+    ]);
+    ActionLog::factory()->create([
+        'action_id' => $this->action->id,
+        'top_model_id' => $this->topModel->id,
+        'episode_id' => $episode5->id,
+        'count' => 5, // Ep 5: owned again → counts
+    ]);
+
+    $points = $this->service->getPlayerPoints($player, $this->season);
+
+    // First ownership (ep 1-2): (1 + 2) * 2.00 = 6.0
+    // Second ownership (ep 5+): 5 * 2.00 = 10.0
+    // Total: 16.0
+    expect($points)->toBe(16.0);
+});
+
 it('dropped model points only count through drop episode', function () {
     $episode2 = Episode::factory()->create(['season_id' => $this->season->id, 'number' => 2]);
 
