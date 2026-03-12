@@ -194,7 +194,7 @@ class PhaseService
         $topModel = TopModel::findOrFail($phase->config['top_model_id']);
         $episode = $phase->episode ?? $phase->season->episodes()
             ->where('status', EpisodeStatus::Ended)
-            ->latest('id')
+            ->latest('ended_at')
             ->first();
 
         $this->gameStateService->pickFreeAgent(

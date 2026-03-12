@@ -2,8 +2,10 @@
 
 namespace App\Filament\Player\Pages;
 
+use App\Enums\EpisodeStatus;
 use App\Enums\GameEventType;
 use App\Enums\SeasonStatus;
+use App\Models\Episode;
 use App\Models\GameEvent;
 use App\Models\Season;
 use App\Models\TopModel;
@@ -84,7 +86,7 @@ class MyActions extends Page
         }
 
         $topModel = TopModel::find($topModelId);
-        $episode = $this->myAction['phase']->episode;
+        $episode = $this->getLatestEndedEpisode();
 
         try {
             app(GameStateService::class)->pickFreeAgent(
@@ -106,7 +108,7 @@ class MyActions extends Page
         }
 
         $topModel = TopModel::find($topModelId);
-        $episode = $this->myAction['phase']->episode;
+        $episode = $this->getLatestEndedEpisode();
 
         try {
             app(GameStateService::class)->dropModel(
@@ -131,7 +133,7 @@ class MyActions extends Page
 
         $dropModel = TopModel::find($this->selectedDropModelId);
         $pickModel = TopModel::find($this->selectedPickModelId);
-        $episode = $this->myAction['phase']->episode;
+        $episode = $this->getLatestEndedEpisode();
 
         try {
             app(GameStateService::class)->swapModel(
@@ -168,5 +170,13 @@ class MyActions extends Page
         app(PhaseService::class)->checkPhaseCompletion($this->myAction['phase']);
 
         Notification::make()->title('Swap skipped.')->success()->send();
+    }
+
+    private function getLatestEndedEpisode(): ?Episode
+    {
+        return $this->season?->episodes()
+            ->where('status', EpisodeStatus::Ended)
+            ->latest('ended_at')
+            ->first();
     }
 }

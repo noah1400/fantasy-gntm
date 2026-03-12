@@ -165,7 +165,7 @@ class GameControl extends Page
             default => [],
         };
 
-        $episode = $this->season->episodes()->where('status', EpisodeStatus::Ended)->latest('id')->first();
+        $episode = $this->season->episodes()->where('status', EpisodeStatus::Ended)->latest('ended_at')->first();
 
         app(PhaseService::class)->createPhase($this->season, $type, $config, $episode);
 
@@ -258,7 +258,7 @@ class GameControl extends Page
 
         return $this->season->episodes()
             ->where('status', EpisodeStatus::Ended)
-            ->latest('id')
+            ->latest('ended_at')
             ->value('id');
     }
 }

@@ -681,13 +681,18 @@ it('ForceAssign: without explicit episode does not replay historical points', fu
     $player = User::factory()->create();
     $this->season->players()->attach($player->id);
 
+    // Ensure beforeEach episode has an earlier ended_at
+    $this->episode->update(['ended_at' => now()->subHours(2)]);
+
     $episode1 = Episode::factory()->ended()->create([
         'season_id' => $this->season->id,
         'number' => 1,
+        'ended_at' => now()->subHour(),
     ]);
     $episode2 = Episode::factory()->ended()->create([
         'season_id' => $this->season->id,
         'number' => 2,
+        'ended_at' => now(),
     ]);
 
     $model = TopModel::factory()->create(['season_id' => $this->season->id]);

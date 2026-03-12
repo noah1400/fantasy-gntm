@@ -94,8 +94,8 @@ class ActionLogger extends Page
                 $actionQuery->where('season_id', $this->selectedSeasonId);
             })
             ->with(['action', 'topModel', 'episode'])
-            ->orderByDesc('updated_at')
-            ->orderByDesc('id');
+            ->orderBy(TopModel::query()->select('name')->whereColumn('top_models.id', 'action_logs.top_model_id'))
+            ->orderBy('action_logs.id');
 
         if ($this->selectedEpisodeId) {
             $query->where('episode_id', $this->selectedEpisodeId);

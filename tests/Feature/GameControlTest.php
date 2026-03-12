@@ -24,10 +24,12 @@ it('preselects the latest ended episode for force assign', function () {
     Episode::factory()->ended()->create([
         'season_id' => $season->id,
         'number' => 1,
+        'ended_at' => now()->subHour(),
     ]);
     $latestEndedEpisode = Episode::factory()->ended()->create([
         'season_id' => $season->id,
         'number' => 2,
+        'ended_at' => now(),
     ]);
 
     $component = Livewire::test(GameControl::class)
