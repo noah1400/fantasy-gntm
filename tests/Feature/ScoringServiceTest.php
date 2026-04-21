@@ -522,6 +522,44 @@ it('trading swap uses correct episode boundary for scoring', function () {
     // Total would be 24 instead of 16 — WRONG
 });
 
+it('correctly scores double-digit episode numbers', function () {
+    // Regression: episode.number was VARCHAR, so "10" < "2" alphabetically
+    $episodes = collect();
+    for ($i = 2; $i <= 10; $i++) {
+        $episodes[$i] = Episode::factory()->create(['season_id' => $this->season->id, 'number' => $i]);
+    }
+
+    $player = User::factory()->create();
+    $this->season->players()->attach($player->id);
+
+    // Model picked in episode 9 → only episode 10+ should count
+    PlayerModel::factory()->pickedIn($episodes[9])->create([
+        'user_id' => $player->id,
+        'top_model_id' => $this->topModel->id,
+        'season_id' => $this->season->id,
+    ]);
+
+    // Episode 9 points (should NOT count)
+    ActionLog::factory()->create([
+        'action_id' => $this->action->id,
+        'top_model_id' => $this->topModel->id,
+        'episode_id' => $episodes[9]->id,
+        'count' => 3,
+    ]);
+    // Episode 10 points (should count)
+    ActionLog::factory()->create([
+        'action_id' => $this->action->id,
+        'top_model_id' => $this->topModel->id,
+        'episode_id' => $episodes[10]->id,
+        'count' => 5,
+    ]);
+
+    $points = $this->service->getPlayerPoints($player, $this->season);
+
+    // Only episode 10: 5 * 2.00 = 10.0
+    expect($points)->toBe(10.0);
+});
+
 it('dropped model points only count through drop episode', function () {
     $episode2 = Episode::factory()->create(['season_id' => $this->season->id, 'number' => 2]);
 

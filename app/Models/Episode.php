@@ -24,6 +24,7 @@ class Episode extends Model
     protected function casts(): array
     {
         return [
+            'number' => 'integer',
             'status' => EpisodeStatus::class,
             'aired_at' => 'datetime',
             'ended_at' => 'datetime',
