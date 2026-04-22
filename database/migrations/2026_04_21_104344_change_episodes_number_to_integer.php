@@ -9,9 +9,23 @@ return new class extends Migration
 {
     public function up(): void
     {
-        $allData = DB::table('episodes')->get();
+        // CRITICAL: Do NOT wrap schema change in DB::transaction().
+        // On SQLite, column changes require dropping and recreating the table.
+        // Laravel disables foreign keys via PRAGMA for this, but PRAGMA is a
+        // no-op inside a transaction — which causes cascade deletes on child
+        // tables (action_logs, game_events, etc.) when episodes is recreated.
 
-        // Pre-check: verify all number values are valid positive integers
+        $allData = DB::table('episodes')->get();
+        $childCountsBefore = [
+            'action_logs' => DB::table('action_logs')->count(),
+            'game_events' => DB::table('game_events')->count(),
+            'game_phases' => DB::table('game_phases')->count(),
+            'top_models_eliminated' => DB::table('top_models')->whereNotNull('eliminated_in_episode_id')->count(),
+            'player_models_picked' => DB::table('player_models')->whereNotNull('picked_in_episode_id')->count(),
+            'player_models_dropped' => DB::table('player_models')->whereNotNull('dropped_after_episode_id')->count(),
+        ];
+
+        // Pre-check: all number values must be valid positive integers
         foreach ($allData as $episode) {
             $number = $episode->number;
 
@@ -22,65 +36,54 @@ return new class extends Migration
             }
         }
 
-        DB::transaction(function () use ($allData) {
-            // Change column type
-            Schema::table('episodes', function (Blueprint $table) {
-                $table->unsignedInteger('number')->change();
-            });
+        // Perform column type change (Laravel manages its own FK handling here)
+        Schema::table('episodes', function (Blueprint $table) {
+            $table->unsignedInteger('number')->change();
+        });
 
-            // Verify row count preserved
-            $totalAfter = DB::table('episodes')->count();
-            if ($totalAfter !== $allData->count()) {
+        // Post-check: verify episodes preserved
+        $totalAfter = DB::table('episodes')->count();
+        if ($totalAfter !== $allData->count()) {
+            throw new RuntimeException(
+                "Episode row count mismatch: {$allData->count()} before, {$totalAfter} after. Data loss detected."
+            );
+        }
+
+        foreach ($allData as $original) {
+            $migrated = DB::table('episodes')->where('id', $original->id)->first();
+
+            if (! $migrated) {
                 throw new RuntimeException(
-                    "Row count mismatch: {$allData->count()} before, {$totalAfter} after. Rolling back."
+                    "Episode id={$original->id} missing after migration. Data loss detected."
                 );
             }
 
-            // Verify every row preserved correctly
-            foreach ($allData as $original) {
-                $migrated = DB::table('episodes')->where('id', $original->id)->first();
-
-                if (! $migrated) {
-                    throw new RuntimeException(
-                        "Episode id={$original->id} missing after migration. Rolling back."
-                    );
-                }
-
-                if ((int) $migrated->number !== (int) $original->number) {
-                    throw new RuntimeException(
-                        "Episode id={$original->id} number changed: '{$original->number}' ��� '{$migrated->number}'. Rolling back."
-                    );
-                }
+            if ((int) $migrated->number !== (int) $original->number) {
+                throw new RuntimeException(
+                    "Episode id={$original->id} number changed: '{$original->number}' -> '{$migrated->number}'."
+                );
             }
+        }
 
-            // Verify foreign key references intact
-            $episodeIds = $allData->pluck('id')->toArray();
-            $fkChecks = [
-                ['action_logs', 'episode_id'],
-                ['game_events', 'episode_id'],
-                ['game_phases', 'episode_id'],
-                ['top_models', 'eliminated_in_episode_id'],
-                ['player_models', 'picked_in_episode_id'],
-                ['player_models', 'dropped_after_episode_id'],
-            ];
+        // Post-check: verify NO child table lost rows (cascade delete detection)
+        $childCountsAfter = [
+            'action_logs' => DB::table('action_logs')->count(),
+            'game_events' => DB::table('game_events')->count(),
+            'game_phases' => DB::table('game_phases')->count(),
+            'top_models_eliminated' => DB::table('top_models')->whereNotNull('eliminated_in_episode_id')->count(),
+            'player_models_picked' => DB::table('player_models')->whereNotNull('picked_in_episode_id')->count(),
+            'player_models_dropped' => DB::table('player_models')->whereNotNull('dropped_after_episode_id')->count(),
+        ];
 
-            foreach ($fkChecks as [$table, $column]) {
-                if (! Schema::hasTable($table)) {
-                    continue;
-                }
-
-                $orphaned = DB::table($table)
-                    ->whereNotNull($column)
-                    ->whereNotIn($column, $episodeIds)
-                    ->count();
-
-                if ($orphaned > 0) {
-                    throw new RuntimeException(
-                        "{$orphaned} orphaned rows in {$table}.{$column}. Rolling back."
-                    );
-                }
+        foreach ($childCountsBefore as $label => $before) {
+            $after = $childCountsAfter[$label];
+            if ($after !== $before) {
+                throw new RuntimeException(
+                    "CASCADE DELETE DETECTED on {$label}: {$before} rows before, {$after} after. "
+                    .'Data was lost. Restore from backup immediately.'
+                );
             }
-        });
+        }
     }
 
     public function down(): void
